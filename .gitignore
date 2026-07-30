@@ -1,0 +1,44 @@
+# Build and simulation output
+build/
+obj_dir/
+*.vcd
+*.fst
+*.lxt
+*.lxt2
+*.wlf
+*.log
+
+# Compiled simulation and intermediate files
+*.o
+*.a
+*.so
+*.elf
+*.hex
+*.bin
+*.map
+*.vvp
+
+# Synthesis and implementation output
+reports/generated/
+results/generated/
+*.json
+*.blif
+*.sdf
+*.spef
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python/tool caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local personal planning (not published to GitHub)
+/PLAN.md
+
