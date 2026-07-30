@@ -117,8 +117,24 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The project is in early implementation. The shared ALU operation type and combinational RV32I ALU
-are implemented and covered by a self-checking unit test.
+The project is in early implementation. The following components are implemented and covered by
+self-checking unit tests:
+
+- shared RV32I ALU operation types;
+- combinational integer ALU;
+- 32 × 32-bit architectural register file with two read ports and one write port.
+
+Run the current regression with:
+
+```bash
+make test
+```
+
+If the simulation tools require an environment setup script:
+
+```bash
+make CAD_ENV=/path/to/env.sh test
+```
 
 ### License
 
@@ -238,8 +254,23 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-项目目前处于早期实现阶段。公共 ALU 操作类型和 RV32I 组合逻辑 ALU 已经实现，
-并通过 self-checking unit test 验证。
+项目目前处于早期实现阶段。以下模块已经实现，并具有 self-checking unit test：
+
+- 公共 RV32I ALU 操作类型；
+- 组合逻辑整数 ALU；
+- 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆。
+
+运行当前全部测试：
+
+```bash
+make test
+```
+
+如果仿真工具需要环境初始化脚本：
+
+```bash
+make CAD_ENV=/path/to/env.sh test
+```
 
 ### 开源许可证
 
