@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Initial RV32I instruction decoder.
+// RV32I instruction decoder.
 //
-// Current milestone: ADD, SUB, ADDI, LUI, AUIPC, and EBREAK.
+// Current support includes every RV32I register-register ALU instruction,
+// plus ADDI, LUI, AUIPC, and EBREAK.
 // The decoder extracts register addresses and converts instruction encoding
 // fields into internal control signals. It does not read registers, calculate
 // results, update the PC, or write architectural state.
 //
-// Give every output a safe default before decoding. Unsupported or reserved
-// encodings must assert illegal_o and must not enable a register write.
+// Outputs start at safe defaults. Unsupported or reserved encodings therefore
+// leave illegal_o asserted without enabling an architectural register write.
 
 `timescale 1ns/1ps
 
@@ -67,6 +68,92 @@ module rv32_decoder (
               illegal_o = 1'b0;
             end else if(funct7 == 7'b0100000) begin
               alu_op_o = rv32_pkg::ALU_SUB;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b001: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_SLL;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b010: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_SLT;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b011: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_SLTU;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b100: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_XOR;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b101: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_SRL;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+            if(funct7 == 7'b0100000) begin
+              alu_op_o = rv32_pkg::ALU_SRA;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b110: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_OR;
+              operand_a_sel_o = rv32_pkg::OP_A_RS1;
+              operand_b_sel_o = rv32_pkg::OP_B_RS2;
+              reg_write_o = 1'b1;
+              rs1_used_o = 1'b1;
+              rs2_used_o = 1'b1;
+              illegal_o = 1'b0;
+            end
+          end
+          3'b111: begin
+            if(funct7 == 7'b0000000) begin
+              alu_op_o = rv32_pkg::ALU_AND;
               operand_a_sel_o = rv32_pkg::OP_A_RS1;
               operand_b_sel_o = rv32_pkg::OP_B_RS2;
               reg_write_o = 1'b1;

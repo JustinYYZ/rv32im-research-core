@@ -124,7 +124,8 @@ self-checking unit tests:
 - combinational integer ALU;
 - 32 × 32-bit architectural register file with two read ports and one write port;
 - I-type and U-type immediate generation;
-- initial decoder support for ADD, SUB, ADDI, LUI, AUIPC, and EBREAK.
+- decoder support for all RV32I register-register ALU instructions, plus ADDI,
+  LUI, AUIPC, and EBREAK.
 
 Run the current regression with:
 
@@ -265,7 +266,7 @@ scripts/             构建、回归、综合和结果处理脚本
 - 组合逻辑整数 ALU；
 - 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
 - I-type 和 U-type immediate 生成；
-- decoder 已支持 ADD、SUB、ADDI、LUI、AUIPC 和 EBREAK。
+- decoder 已支持全部 RV32I 寄存器 ALU 指令，以及 ADDI、LUI、AUIPC 和 EBREAK。
 
 运行当前全部测试：
 

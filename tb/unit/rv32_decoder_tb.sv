@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Self-checking unit test for the initial rv32_decoder milestone.
+// Self-checking unit test for rv32_decoder.
 //
-// Useful instruction encodings:
-//   0x002081b3  ADD   x3, x1, x2
-//   0x402081b3  SUB   x3, x1, x2
-//   0xfff08193  ADDI  x3, x1, -1
-//   0x123451b7  LUI   x3, 0x12345
-//   0x12345197  AUIPC x3, 0x12345
-//   0x00100073  EBREAK
+// Tests are grouped into cumulative milestones so later decoder changes keep
+// exercising all earlier instructions. Milestone 1 covers the initial ADD,
+// SUB, ADDI, LUI, AUIPC, and EBREAK subset. Milestone 2 adds the remaining
+// RV32I register-register ALU instructions.
 //
-// Check register addresses, source-used flags, ALU operation, operand
-// selections, immediate kind, register-write enable, ebreak, and illegal.
-// Also test an all-zero word and reserved ADD/SUB funct fields as illegal,
-// with reg_write_o deasserted.
+// Each legal instruction checks its register fields and control outputs.
+// Reserved encodings must remain illegal with architectural writes disabled.
 
 `timescale 1ns/1ps
 
@@ -151,12 +146,36 @@ module rv32_decoder_tb;
     end
   endtask
 
+  task automatic test_milestone_2;
+    begin
+      check_decoder("SLL", 32'h002091b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_SLL, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("SLT", 32'h0020a1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_SLT, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("SLTU", 32'h0020b1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_SLTU, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("XOR", 32'h0020c1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_XOR, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("SRL", 32'h0020d1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_SRL, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("SRA", 32'h4020d1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_SRA, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("OR", 32'h0020e1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_OR, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_decoder("AND", 32'h0020f1b3, 5'd1, 5'd2, 5'd3, 1'b1, 1'b1,
+                   ALU_AND, OP_A_RS1, OP_B_RS2, IMM_NONE);
+      check_illegal("SLL with reserved funct7", 32'h402091b3);
+    end
+  endtask
+
 
   initial begin
     instr = 32'd0;
     errors = 0;
 
     test_milestone_1();
+    test_milestone_2();
+
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");
       $finish;

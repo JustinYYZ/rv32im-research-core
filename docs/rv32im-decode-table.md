@@ -11,6 +11,45 @@ RV32I 基础整数指令和 M 乘除扩展，不包含 A、F、D、C、V、Zicsr
 - [M Extension for Integer Multiplication and Division](https://docs.riscv.org/reference/isa/unpriv/m-st-ext.html)
 - [RV32/64 Instruction Set Listings](https://docs.riscv.org/reference/isa/unpriv/rv-32-64g.html)
 
+## 0. 开发路线：先看这里
+
+本文档同时包含“开发任务”和“ISA 查表资料”。实际开发时先看本节确定当前任务，
+再到后面的对应章节查 encoding。不要按照整张 ISA 表从上到下直接实现。
+
+| Milestone | 状态 | 本阶段内容 | 主要修改文件 |
+|---|---|---|---|
+| 1 | 已完成 | ADD、SUB、ADDI、LUI、AUIPC、EBREAK | decoder、decoder TB |
+| 2 | 已完成 | 补齐 SLL、SLT、SLTU、XOR、SRL、SRA、OR、AND | decoder、decoder TB |
+| 3 | **下一步** | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
+| 4 | 后续 | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
+| 5 | 后续 | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
+| 6 | 后续 | load 和 store | package、decoder、LSU 及 TB |
+| 7 | 后续 | FENCE 和 ECALL | decoder、core control 及 TB |
+| 8 | 后续 | RV32M 乘除法指令 | package、decoder、mul/div 单元及 TB |
+
+### Milestone 3 的具体任务
+
+下一步只修改 `rtl/frontend/rv32_decoder.sv` 和
+`tb/unit/rv32_decoder_tb.sv`，加入：
+
+```text
+SLTI  SLTIU  XORI  ORI  ANDI  SLLI  SRLI  SRAI
+```
+
+ADDI 已在 milestone 1 完成。上述指令都是 I-type，所以现有 `IMM_I` 已经够用，
+本阶段不需要修改 immediate generator。
+
+验收要求：
+
+1. 新增 `test_milestone_3()`，并继续调用 milestone 1 和 2；
+2. 八条合法指令各有至少一个 directed test；
+3. SLLI、SRLI 和 SRAI 检查合法的 `instr[31:25]`；
+4. 至少测试一条 shift-immediate 的 reserved encoding；
+5. `make test` 全部通过，Yosys 不产生 latch。
+
+完成一个 milestone 后，只更新本节的状态和“下一步”标记。这样下次打开文档即可直接
+找到要做的内容，而不需要重新搜索整份 ISA 表。
+
 ## 1. Decoder 的查表顺序
 
 一条指令通常不能只看 opcode。推荐按照下面的顺序判断：
@@ -143,9 +182,9 @@ RISC-V 把寄存器字段固定在相同位置，方便硬件并行提取：
 | JAL | `1101111` | `0x6f` |
 | SYSTEM | `1110011` | `0x73` |
 
-## 5. 当前 decoder milestone
+## 5. 当前已实现的 decoder 指令
 
-当前 `rv32_decoder` 先实现下面六条指令：
+Milestone 1 建立了最小 decoder 接口和安全的 illegal 默认行为：
 
 | 指令 | opcode | funct3 | funct7/完整编码 | Operand A | Operand B | ALU | IMM | rs1/rs2 used | 写 rd |
 |---|---|---|---|---|---|---|---|---|---|
@@ -156,12 +195,45 @@ RISC-V 把寄存器字段固定在相同位置，方便硬件并行提取：
 | AUIPC | `0010111` | — | — | PC | IMM | ADD | U | 0/0 | 1 |
 | EBREAK | `1110011` | — | 完整值 `0x00100073` | — | — | — | NONE | 0/0 | 0 |
 
-对应的示例机器码：
+Milestone 2 补齐了其余 RV32I register-register ALU 指令。它们使用相同的
+operand 和写回控制，区别主要在 `funct3`、`funct7` 和 ALU operation：
+
+| 指令 | funct3 | funct7 | ALU |
+|---|---:|---:|---|
+| SLL | `001` | `0000000` | SLL |
+| SLT | `010` | `0000000` | SLT |
+| SLTU | `011` | `0000000` | SLTU |
+| XOR | `100` | `0000000` | XOR |
+| SRL | `101` | `0000000` | SRL |
+| SRA | `101` | `0100000` | SRA |
+| OR | `110` | `0000000` | OR |
+| AND | `111` | `0000000` | AND |
+
+所有 milestone 2 指令都使用：
+
+```text
+Operand A = RS1
+Operand B = RS2
+IMM = NONE
+rs1_used = 1
+rs2_used = 1
+reg_write = 1
+```
+
+当前回归测试使用的示例机器码：
 
 | Machine code | Assembly |
 |---:|---|
 | `0x002081b3` | `ADD x3, x1, x2` |
 | `0x402081b3` | `SUB x3, x1, x2` |
+| `0x002091b3` | `SLL x3, x1, x2` |
+| `0x0020a1b3` | `SLT x3, x1, x2` |
+| `0x0020b1b3` | `SLTU x3, x1, x2` |
+| `0x0020c1b3` | `XOR x3, x1, x2` |
+| `0x0020d1b3` | `SRL x3, x1, x2` |
+| `0x4020d1b3` | `SRA x3, x1, x2` |
+| `0x0020e1b3` | `OR x3, x1, x2` |
+| `0x0020f1b3` | `AND x3, x1, x2` |
 | `0xfff08193` | `ADDI x3, x1, -1` |
 | `0x123451b7` | `LUI x3, 0x12345` |
 | `0x12345197` | `AUIPC x3, 0x12345` |
@@ -233,7 +305,24 @@ address = rs1 + imm_s
 | SH | `001` | `rs2[15:0]` | 0 |
 | SW | `010` | `rs2[31:0]` | 0 |
 
-## 10. Immediate ALU
+## 10. Milestone 2 查表：Register ALU
+
+所有寄存器 ALU 指令使用 opcode `0110011` 和 R-type 格式。
+
+| 指令 | funct3 | funct7 | 操作 |
+|---|---:|---:|---|
+| ADD | `000` | `0000000` | `rd = rs1 + rs2` |
+| SUB | `000` | `0100000` | `rd = rs1 - rs2` |
+| SLL | `001` | `0000000` | logical left shift |
+| SLT | `010` | `0000000` | signed comparison |
+| SLTU | `011` | `0000000` | unsigned comparison |
+| XOR | `100` | `0000000` | bitwise XOR |
+| SRL | `101` | `0000000` | logical right shift |
+| SRA | `101` | `0100000` | arithmetic right shift |
+| OR | `110` | `0000000` | bitwise OR |
+| AND | `111` | `0000000` | bitwise AND |
+
+## 11. Milestone 3 查表：Immediate ALU
 
 所有 immediate ALU 指令使用 opcode `0010011` 和 I-type 格式。
 
@@ -255,23 +344,6 @@ address = rs1 + imm_s
   不得把 `instr[31:25]` 当 funct7 检查。
 - SLTIU 先对 I-type immediate 做符号扩展，然后执行 unsigned comparison。
 - shift-immediate 的 shift amount 是 `instr[24:20]`。
-
-## 11. Register ALU
-
-所有寄存器 ALU 指令使用 opcode `0110011` 和 R-type 格式。
-
-| 指令 | funct3 | funct7 | 操作 |
-|---|---:|---:|---|
-| ADD | `000` | `0000000` | `rd = rs1 + rs2` |
-| SUB | `000` | `0100000` | `rd = rs1 - rs2` |
-| SLL | `001` | `0000000` | logical left shift |
-| SLT | `010` | `0000000` | signed comparison |
-| SLTU | `011` | `0000000` | unsigned comparison |
-| XOR | `100` | `0000000` | bitwise XOR |
-| SRL | `101` | `0000000` | logical right shift |
-| SRA | `101` | `0100000` | arithmetic right shift |
-| OR | `110` | `0000000` | bitwise OR |
-| AND | `111` | `0000000` | bitwise AND |
 
 ## 12. RV32M
 
@@ -327,24 +399,18 @@ RV32M 的除零和 signed overflow 不产生 arithmetic trap。
 | U | LUI、AUIPC | `{inst[31:12], 12'b0}` |
 | J | JAL | `{{11{inst[31]}}, inst[31], inst[19:12], inst[20], inst[30:21], 1'b0}` |
 
-## 15. 分阶段实现顺序
+## 15. 每个 milestone 的工作方式
 
-当前 decoder interface 还不能表达全部 RV32IM 行为，因此不要一次把整张表写进一个
-巨大 case。推荐顺序：
+每次开发都按相同顺序进行：
 
-```text
-ADD
-  -> SUB
-  -> ADDI
-  -> LUI
-  -> AUIPC
-  -> EBREAK
-  -> 完整 register/immediate ALU
-  -> branch 与 jump
-  -> load/store
-  -> FENCE/ECALL
-  -> RV32M
-```
+1. 从第 0 节确认唯一的“下一步”；
+2. 在对应查表章节确认 opcode、funct3、funct7 和 immediate 类型；
+3. 如果现有控制信号无法表达该指令，先扩展 package 和 decoder interface；
+4. 修改 decoder 或对应执行模块；
+5. 新建下一个累计 milestone test，并保留所有旧测试；
+6. 测试合法 encoding 和至少一个相近的 reserved encoding；
+7. 运行 `make test` 和 Yosys 检查。
 
-每增加一类指令，先扩展 package 中的控制类型和 decoder interface，再写对应执行模块
-与单元测试。未识别或 reserved encoding 必须保持 `illegal=1` 且关闭所有副作用。
+不要为了消除 case 中未枚举的组合而把所有 bit pattern 写出来。Decoder 在进入 case
+前设置安全默认值即可：未识别或 reserved encoding 保持 `illegal=1`，同时关闭
+register write、memory write 和其他 architectural side effect。
