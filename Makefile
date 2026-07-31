@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Build and simulation entry points for RV32IM Research Core.
-# Unit tests: make test-alu, make test-regfile
+# Run all unit tests with `make test`, or select one of the module targets below.
 
 CAD_ENV   ?=
 IVERILOG  ?= iverilog
@@ -23,9 +23,21 @@ REGFILE_SRCS := \
 	rtl/backend/rv32_regfile.sv \
 	tb/unit/rv32_regfile_tb.sv
 
-.PHONY: test test-alu test-regfile tools clean
+IMM_GEN_TEST := $(BUILD_DIR)/rv32_imm_gen_tb
+IMM_GEN_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	tb/unit/rv32_imm_gen_tb.sv
 
-test: test-alu test-regfile
+DECODER_TEST := $(BUILD_DIR)/rv32_decoder_tb
+DECODER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	tb/unit/rv32_decoder_tb.sv
+
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder tools clean
+
+test: test-alu test-regfile test-imm-gen test-decoder
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -43,10 +55,26 @@ $(REGFILE_TEST): $(REGFILE_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_regfile_tb -o $@ $(REGFILE_SRCS)'
 
+test-imm-gen: $(IMM_GEN_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(IMM_GEN_TEST): $(IMM_GEN_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_imm_gen_tb -o $@ $(IMM_GEN_SRCS)'
+
+test-decoder: $(DECODER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(DECODER_TEST): $(DECODER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_decoder_tb -o $@ $(DECODER_SRCS)'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
 		printf "vvp:      " && command -v $(VVP)'
 
 clean:
-	rm -f $(ALU_TEST) $(REGFILE_TEST)
+	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST)

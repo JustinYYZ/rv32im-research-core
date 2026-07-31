@@ -120,9 +120,11 @@ scripts/             build, regression, synthesis, and result-processing scripts
 The project is in early implementation. The following components are implemented and covered by
 self-checking unit tests:
 
-- shared RV32I ALU operation types;
+- shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
-- 32 × 32-bit architectural register file with two read ports and one write port.
+- 32 × 32-bit architectural register file with two read ports and one write port;
+- I-type and U-type immediate generation;
+- initial decoder support for ADD, SUB, ADDI, LUI, AUIPC, and EBREAK.
 
 Run the current regression with:
 
@@ -135,6 +137,9 @@ If the simulation tools require an environment setup script:
 ```bash
 make CAD_ENV=/path/to/env.sh test
 ```
+
+The [RV32IM decoder table](docs/rv32im-decode-table.md) summarizes instruction formats,
+encodings, immediate construction, and planned decoder behavior.
 
 ### License
 
@@ -256,9 +261,11 @@ scripts/             构建、回归、综合和结果处理脚本
 
 项目目前处于早期实现阶段。以下模块已经实现，并具有 self-checking unit test：
 
-- 公共 RV32I ALU 操作类型；
+- 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
-- 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆。
+- 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
+- I-type 和 U-type immediate 生成；
+- decoder 已支持 ADD、SUB、ADDI、LUI、AUIPC 和 EBREAK。
 
 运行当前全部测试：
 
@@ -271,6 +278,9 @@ make test
 ```bash
 make CAD_ENV=/path/to/env.sh test
 ```
+
+[RV32IM decoder 对照表](docs/rv32im-decode-table.md)汇总了指令格式、编码、
+immediate 拼接方式和计划中的 decoder 行为。
 
 ### 开源许可证
 
