@@ -5,7 +5,8 @@
 // Tests are grouped into cumulative milestones so later decoder changes keep
 // exercising all earlier instructions. Milestone 1 covers the initial ADD,
 // SUB, ADDI, LUI, AUIPC, and EBREAK subset. Milestone 2 adds the remaining
-// RV32I register-register ALU instructions.
+// register-register ALU instructions, and milestone 3 adds the remaining
+// immediate ALU instructions.
 //
 // Each legal instruction checks its register fields and control outputs.
 // Reserved encodings must remain illegal with architectural writes disabled.
@@ -168,6 +169,28 @@ module rv32_decoder_tb;
     end
   endtask
 
+  task automatic test_milestone_3;
+    begin
+      check_decoder("SLTI", 32'hfff0a193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_SLT, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("SLTIU", 32'hfff0b193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_SLTU, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("XORI", 32'h0550c193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_XOR, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("ORI", 32'h0550e193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_OR, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("ANDI", 32'h0550f193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_AND, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("SLLI", 32'h00409193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_SLL, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("SRLI", 32'h0040d193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_SRL, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_decoder("SRAI", 32'h4040d193, 5'd1, 5'd0, 5'd3, 1'b1, 1'b0,
+                   ALU_SRA, OP_A_RS1, OP_B_IMM, IMM_I);
+      check_illegal("SLLI with reserved funct7", 32'h40409193);
+    end
+  endtask
+
 
   initial begin
     instr = 32'd0;
@@ -175,6 +198,7 @@ module rv32_decoder_tb;
 
     test_milestone_1();
     test_milestone_2();
+    test_milestone_3();
 
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");

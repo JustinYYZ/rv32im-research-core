@@ -20,31 +20,31 @@ RV32I 基础整数指令和 M 乘除扩展，不包含 A、F、D、C、V、Zicsr
 |---|---|---|---|
 | 1 | 已完成 | ADD、SUB、ADDI、LUI、AUIPC、EBREAK | decoder、decoder TB |
 | 2 | 已完成 | 补齐 SLL、SLT、SLTU、XOR、SRL、SRA、OR、AND | decoder、decoder TB |
-| 3 | **下一步** | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
-| 4 | 后续 | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
+| 3 | 已完成 | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
+| 4 | **下一步** | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
 | 5 | 后续 | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
 | 6 | 后续 | load 和 store | package、decoder、LSU 及 TB |
 | 7 | 后续 | FENCE 和 ECALL | decoder、core control 及 TB |
 | 8 | 后续 | RV32M 乘除法指令 | package、decoder、mul/div 单元及 TB |
 
-### Milestone 3 的具体任务
+### Milestone 4 的具体任务
 
-下一步只修改 `rtl/frontend/rv32_decoder.sv` 和
-`tb/unit/rv32_decoder_tb.sv`，加入：
+下一步只修改 `rtl/frontend/rv32_imm_gen.sv` 和
+`tb/unit/rv32_imm_gen_tb.sv`，补齐：
 
 ```text
-SLTI  SLTIU  XORI  ORI  ANDI  SLLI  SRLI  SRAI
+IMM_S  IMM_B  IMM_J
 ```
 
-ADDI 已在 milestone 1 完成。上述指令都是 I-type，所以现有 `IMM_I` 已经够用，
-本阶段不需要修改 immediate generator。
+`imm_kind_e` 已经定义了这三种类型，本阶段不需要修改 package
+或 decoder。任务是把分散的 instruction bit 重排成 32-bit 有符号 immediate。
 
 验收要求：
 
-1. 新增 `test_milestone_3()`，并继续调用 milestone 1 和 2；
-2. 八条合法指令各有至少一个 directed test；
-3. SLLI、SRLI 和 SRAI 检查合法的 `instr[31:25]`；
-4. 至少测试一条 shift-immediate 的 reserved encoding；
+1. 实现 IMM_S、IMM_B 和 IMM_J，保留已有 IMM_I、IMM_U 和 IMM_NONE 行为；
+2. 每种新格式都测试正数和负数，覆盖符号扩展；
+3. B-type 和 J-type 测试最低位固定为零；
+4. S-type 测试分散在 `[31:25]` 和 `[11:7]` 的两段 immediate；
 5. `make test` 全部通过，Yosys 不产生 latch。
 
 完成一个 milestone 后，只更新本节的状态和“下一步”标记。这样下次打开文档即可直接
@@ -220,6 +220,11 @@ rs2_used = 1
 reg_write = 1
 ```
 
+Milestone 3 补齐了其余 RV32I immediate ALU 指令：SLTI、SLTIU、XORI、
+ORI、ANDI、SLLI、SRLI 和 SRAI。它们都使用 RS1 和 IMM 作为 ALU
+operand，并写回 rd。Shift-immediate 指令还会校验 `instr[31:25]`；
+详细 encoding 见第 11 节。
+
 当前回归测试使用的示例机器码：
 
 | Machine code | Assembly |
@@ -235,6 +240,14 @@ reg_write = 1
 | `0x0020e1b3` | `OR x3, x1, x2` |
 | `0x0020f1b3` | `AND x3, x1, x2` |
 | `0xfff08193` | `ADDI x3, x1, -1` |
+| `0xfff0a193` | `SLTI x3, x1, -1` |
+| `0xfff0b193` | `SLTIU x3, x1, -1` |
+| `0x0550c193` | `XORI x3, x1, 0x55` |
+| `0x0550e193` | `ORI x3, x1, 0x55` |
+| `0x0550f193` | `ANDI x3, x1, 0x55` |
+| `0x00409193` | `SLLI x3, x1, 4` |
+| `0x0040d193` | `SRLI x3, x1, 4` |
+| `0x4040d193` | `SRAI x3, x1, 4` |
 | `0x123451b7` | `LUI x3, 0x12345` |
 | `0x12345197` | `AUIPC x3, 0x12345` |
 | `0x00100073` | `EBREAK` |
