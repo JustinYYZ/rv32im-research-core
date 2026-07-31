@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Immediate generator for RV32 instruction formats.
-//
-// Current milestone:
-//   - IMM_I: sign-extend instr_i[31:20] to 32 bits.
-//   - IMM_U: copy instr_i[31:12] into bits [31:12] and clear bits [11:0].
-//   - Return zero for IMM_NONE and formats not implemented in this milestone.
+// Immediate generator for the RV32 I, S, B, U, and J instruction formats.
+// I, S, B, and J immediates are sign-extended to 32 bits. B- and J-type
+// offsets receive the implicit zero least-significant bit. IMM_NONE returns
+// zero.
 //
 // This module only rearranges instruction bits. It does not decide which
 // immediate format an instruction uses; that decision belongs to the decoder.
@@ -27,6 +25,15 @@ module rv32_imm_gen (
       end
       rv32_pkg::IMM_U: begin
         imm_o = {instr_i[31:12], 12'd0};
+      end
+      rv32_pkg::IMM_S: begin
+        imm_o = {{20{instr_i[31]}}, instr_i[31:25], instr_i[11:7]};
+      end
+      rv32_pkg::IMM_B: begin
+        imm_o = {{19{instr_i[31]}}, instr_i[31], instr_i[7], instr_i[30:25], instr_i[11:8], 1'b0};
+      end
+      rv32_pkg::IMM_J: begin
+        imm_o = {{11{instr_i[31]}}, instr_i[31], instr_i[19:12], instr_i[20], instr_i[30:21], 1'b0};
       end
       default: begin
         imm_o = 32'd0;

@@ -2,16 +2,10 @@
 //
 // Self-checking unit test for rv32_imm_gen.
 //
-// Minimum cases:
-//   IMM_I  0x001xxxxx -> 0x00000001
-//   IMM_I  0xfffxxxxx -> 0xffffffff
-//   IMM_I  0x800xxxxx -> 0xfffff800
-//   IMM_U  0x12345xxx -> 0x12345000
-//   IMM_U  0xfffffxxx -> 0xfffff000
-//   IMM_NONE          -> 0x00000000
-//
-// Use explicit expected constants. In particular, do not calculate the
-// expected value by copying the DUT's concatenation into the testbench.
+// The directed cases cover positive and negative I/S/B/J immediates, U-type
+// construction, the implicit low zero in branch/jump offsets, and IMM_NONE.
+// Expected values are explicit constants so the testbench does not reproduce
+// the DUT's concatenation logic.
 
 `timescale 1ns/1ps
 
@@ -55,6 +49,12 @@ module rv32_imm_gen_tb;
     check_imm_gen("IMM_I 0x800xxxxx", IMM_I, 32'h80000000, 32'hfffff800);
     check_imm_gen("IMM_U 0x12345xxx", IMM_U, 32'h12345000, 32'h12345000);
     check_imm_gen("IMM_U 0xfffffxxx", IMM_U, 32'hfffff000, 32'hfffff000);
+    check_imm_gen("IMM_S positive", IMM_S, 32'h0020a823, 32'h00000010);
+    check_imm_gen("IMM_S negative", IMM_S, 32'hfe20a823, 32'hfffffff0);
+    check_imm_gen("IMM_B positive", IMM_B, 32'h00208463, 32'h00000008);
+    check_imm_gen("IMM_B negative", IMM_B, 32'hfe208ee3, 32'hfffffffc);
+    check_imm_gen("IMM_J positive", IMM_J, 32'h008000ef, 32'h00000008);
+    check_imm_gen("IMM_J negative", IMM_J, 32'hffdff0ef, 32'hfffffffc);
     check_imm_gen("IMM_NONE", IMM_NONE, 32'h00000000, 32'h00000000);
     check_imm_gen("IMM_NONE ignores bits", IMM_NONE, 32'hfff00000, 32'h00000000);
 

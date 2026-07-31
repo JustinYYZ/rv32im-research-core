@@ -21,31 +21,32 @@ RV32I 基础整数指令和 M 乘除扩展，不包含 A、F、D、C、V、Zicsr
 | 1 | 已完成 | ADD、SUB、ADDI、LUI、AUIPC、EBREAK | decoder、decoder TB |
 | 2 | 已完成 | 补齐 SLL、SLT、SLTU、XOR、SRL、SRA、OR、AND | decoder、decoder TB |
 | 3 | 已完成 | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
-| 4 | **下一步** | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
-| 5 | 后续 | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
+| 4 | 已完成 | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
+| 5 | **下一步** | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
 | 6 | 后续 | load 和 store | package、decoder、LSU 及 TB |
 | 7 | 后续 | FENCE 和 ECALL | decoder、core control 及 TB |
 | 8 | 后续 | RV32M 乘除法指令 | package、decoder、mul/div 单元及 TB |
 
-### Milestone 4 的具体任务
+### Milestone 5 的具体任务
 
-下一步只修改 `rtl/frontend/rv32_imm_gen.sv` 和
-`tb/unit/rv32_imm_gen_tb.sv`，补齐：
+下一步实现六条 conditional branch 以及 JAL/JALR：
 
 ```text
-IMM_S  IMM_B  IMM_J
+BEQ  BNE  BLT  BGE  BLTU  BGEU  JAL  JALR
 ```
 
-`imm_kind_e` 已经定义了这三种类型，本阶段不需要修改 package
-或 decoder。任务是把分散的 instruction bit 重排成 32-bit 有符号 immediate。
+现有 decoder interface 还不能表示 branch condition、control-flow target 和
+`pc+4` 写回。因此先在 package 中定义所需控制类型，再扩展 decoder；
+branch comparison 保持为独立的组合逻辑单元。
 
 验收要求：
 
-1. 实现 IMM_S、IMM_B 和 IMM_J，保留已有 IMM_I、IMM_U 和 IMM_NONE 行为；
-2. 每种新格式都测试正数和负数，覆盖符号扩展；
-3. B-type 和 J-type 测试最低位固定为零；
-4. S-type 测试分散在 `[31:25]` 和 `[11:7]` 的两段 immediate；
-5. `make test` 全部通过，Yosys 不产生 latch。
+1. BEQ/BNE、signed BLT/BGE 和 unsigned BLTU/BGEU 的 comparison 全部有单元测试；
+2. Branch 使用 `IMM_B`、读取 rs1/rs2 且不写 rd；
+3. JAL 使用 `IMM_J`，JALR 使用 `IMM_I` 且只接受 `funct3=000`；
+4. JAL/JALR 写回 `pc+4`，JALR target 的 bit 0 必须清零；
+5. Decoder TB 保留 milestone 1–3，并增加合法与 reserved encoding 测试；
+6. `make test` 全部通过，Yosys 不产生 latch。
 
 完成一个 milestone 后，只更新本节的状态和“下一步”标记。这样下次打开文档即可直接
 找到要做的内容，而不需要重新搜索整份 ISA 表。
