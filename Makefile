@@ -35,9 +35,15 @@ DECODER_SRCS := \
 	rtl/frontend/rv32_decoder.sv \
 	tb/unit/rv32_decoder_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder tools clean
+BRANCH_UNIT_TEST := $(BUILD_DIR)/rv32_branch_unit_tb
+BRANCH_UNIT_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	tb/unit/rv32_branch_unit_tb.sv
 
-test: test-alu test-regfile test-imm-gen test-decoder
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit tools clean
+
+test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -71,10 +77,18 @@ $(DECODER_TEST): $(DECODER_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_decoder_tb -o $@ $(DECODER_SRCS)'
 
+test-branch-unit: $(BRANCH_UNIT_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(BRANCH_UNIT_TEST): $(BRANCH_UNIT_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_branch_unit_tb -o $@ $(BRANCH_UNIT_SRCS)'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
 		printf "vvp:      " && command -v $(VVP)'
 
 clean:
-	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST)
+	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) $(BRANCH_UNIT_TEST)

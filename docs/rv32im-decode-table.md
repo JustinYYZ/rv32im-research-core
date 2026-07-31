@@ -22,22 +22,22 @@ RV32I 基础整数指令和 M 乘除扩展，不包含 A、F、D、C、V、Zicsr
 | 2 | 已完成 | 补齐 SLL、SLT、SLTU、XOR、SRL、SRA、OR、AND | decoder、decoder TB |
 | 3 | 已完成 | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
 | 4 | 已完成 | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
-| 5 | **下一步** | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
+| 5 | **进行中** | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
 | 6 | 后续 | load 和 store | package、decoder、LSU 及 TB |
 | 7 | 后续 | FENCE 和 ECALL | decoder、core control 及 TB |
 | 8 | 后续 | RV32M 乘除法指令 | package、decoder、mul/div 单元及 TB |
 
 ### Milestone 5 的具体任务
 
-下一步实现六条 conditional branch 以及 JAL/JALR：
+Milestone 5 实现六条 conditional branch 以及 JAL/JALR：
 
 ```text
 BEQ  BNE  BLT  BGE  BLTU  BGEU  JAL  JALR
 ```
 
-现有 decoder interface 还不能表示 branch condition、control-flow target 和
-`pc+4` 写回。因此先在 package 中定义所需控制类型，再扩展 decoder；
-branch comparison 保持为独立的组合逻辑单元。
+Branch comparison 单元、六种 comparison control 和对应单元测试已完成。
+下一步是把 `control_flow_e`、`branch_op_e` 和 `writeback_sel_e` 接入
+decoder，然后解码 branch、JAL 和 JALR。
 
 验收要求：
 

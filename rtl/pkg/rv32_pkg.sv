@@ -2,8 +2,7 @@
 //
 // Shared types used across the RV32IM core.
 //
-// ALU operation values are internal control encodings. The decoder and all
-// execution units import this package so that they use the same definitions.
+// The decoder and execution units share these internal control encodings.
 
 `timescale 1ns/1ps
 
@@ -22,6 +21,31 @@ package rv32_pkg;
     ALU_AND
   } alu_op_e;
 
+  // Selects the comparison used by a conditional branch.
+  typedef enum logic [2:0] {
+    BR_EQ,
+    BR_NE,
+    BR_LT,
+    BR_GE,
+    BR_LTU,
+    BR_GEU
+  } branch_op_e;
+
+  // Classifies instructions that may redirect the PC.
+  typedef enum logic [1:0] {
+    CF_NONE,
+    CF_BRANCH,
+    CF_JAL,
+    CF_JALR
+  } control_flow_e;
+
+  // Selects the value written to an architectural destination register.
+  typedef enum logic [1:0] {
+    WB_ALU,
+    WB_PC_PLUS_4,
+    WB_MEM
+  } writeback_sel_e;
+
   // Selects the source connected to the ALU's left and right operands.
   // ZERO + immediate implements LUI without adding a separate datapath.
   typedef enum logic [1:0] {
@@ -36,8 +60,6 @@ package rv32_pkg;
   } operand_b_sel_e;
 
   // Immediate layouts encoded by the base RISC-V instruction formats.
-  // The first decoder milestone uses I and U; the remaining formats are
-  // defined now so later branch/load/store work can keep the same interface.
   typedef enum logic [2:0] {
     IMM_NONE,
     IMM_I,
