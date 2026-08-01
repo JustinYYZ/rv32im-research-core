@@ -22,31 +22,34 @@ RV32I 基础整数指令和 M 乘除扩展，不包含 A、F、D、C、V、Zicsr
 | 2 | 已完成 | 补齐 SLL、SLT、SLTU、XOR、SRL、SRA、OR、AND | decoder、decoder TB |
 | 3 | 已完成 | 补齐 RV32I immediate ALU 指令 | decoder、decoder TB |
 | 4 | 已完成 | 增加 S、B、J immediate 生成 | immediate generator、对应 TB |
-| 5 | **进行中** | branch、JAL 和 JALR | package、decoder、branch/jump 单元及 TB |
-| 6 | 后续 | load 和 store | package、decoder、LSU 及 TB |
+| 5 | 已完成 | branch/JAL/JALR decode 与 branch comparison | package、decoder、branch unit 及 TB |
+| 6 | **下一步** | load 和 store | package、decoder、LSU 及 TB |
 | 7 | 后续 | FENCE 和 ECALL | decoder、core control 及 TB |
 | 8 | 后续 | RV32M 乘除法指令 | package、decoder、mul/div 单元及 TB |
 
-### Milestone 5 的具体任务
+### Milestone 6 的具体任务
 
-Milestone 5 实现六条 conditional branch 以及 JAL/JALR：
+Milestone 6 实现 RV32I load/store 指令：
 
 ```text
-BEQ  BNE  BLT  BGE  BLTU  BGEU  JAL  JALR
+LB  LH  LW  LBU  LHU  SB  SH  SW
 ```
 
-Branch comparison 单元、六种 comparison control 和对应单元测试已完成。
-下一步是把 `control_flow_e`、`branch_op_e` 和 `writeback_sel_e` 接入
-decoder，然后解码 branch、JAL 和 JALR。
+Milestone 5 已验证 control-flow decode 和 branch comparison。实际 PC redirect、
+`pc+4` 写回 mux 以及 JALR target bit 0 清零会在 core datapath 集成时完成。
+
+现有 decoder interface 还不能表示 memory read/write、access width 和 load
+extension。下一步先在 package 中定义 memory control，再扩展 decoder
+和 LSU。
 
 验收要求：
 
-1. BEQ/BNE、signed BLT/BGE 和 unsigned BLTU/BGEU 的 comparison 全部有单元测试；
-2. Branch 使用 `IMM_B`、读取 rs1/rs2 且不写 rd；
-3. JAL 使用 `IMM_J`，JALR 使用 `IMM_I` 且只接受 `funct3=000`；
-4. JAL/JALR 写回 `pc+4`，JALR target 的 bit 0 必须清零；
-5. Decoder TB 保留 milestone 1–3，并增加合法与 reserved encoding 测试；
-6. `make test` 全部通过，Yosys 不产生 latch。
+1. Load 使用 `rs1 + IMM_I` 生成地址，写回选择 `WB_MEM`；
+2. Store 使用 `rs1 + IMM_S` 生成地址，读取 rs2 且不写 rd；
+3. Byte、halfword 和 word access 能产生正确的 byte mask；
+4. LB/LH 符号扩展，LBU/LHU 零扩展，LW 保留全部 32 bit；
+5. Reserved load/store funct3 保持 illegal 且关闭 memory side effect；
+6. Decoder 和 LSU 均有单元测试，`make test` 全部通过。
 
 完成一个 milestone 后，只更新本节的状态和“下一步”标记。这样下次打开文档即可直接
 找到要做的内容，而不需要重新搜索整份 ISA 表。

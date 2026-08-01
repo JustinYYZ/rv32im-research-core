@@ -126,7 +126,8 @@ self-checking unit tests:
 - 32 × 32-bit architectural register file with two read ports and one write port;
 - I-, S-, B-, U-, and J-type immediate generation;
 - decoder support for all RV32I register-register and immediate ALU
-  instructions, plus LUI, AUIPC, and EBREAK.
+  instructions, conditional branches, JAL, and JALR, plus LUI, AUIPC, and
+  EBREAK.
 
 Run the current regression with:
 
@@ -268,8 +269,8 @@ scripts/             构建、回归、综合和结果处理脚本
 - RV32I 组合逻辑 branch-condition 单元；
 - 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
 - I、S、B、U 和 J-type immediate 生成；
-- decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令，以及
-  LUI、AUIPC 和 EBREAK。
+- decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令、conditional
+  branch、JAL 和 JALR，以及 LUI、AUIPC 和 EBREAK。
 
 运行当前全部测试：
 

@@ -5,8 +5,8 @@
 // Tests are grouped into cumulative milestones so later decoder changes keep
 // exercising all earlier instructions. Milestone 1 covers the initial ADD,
 // SUB, ADDI, LUI, AUIPC, and EBREAK subset. Milestone 2 adds the remaining
-// register-register ALU instructions, and milestone 3 adds the remaining
-// immediate ALU instructions.
+// register-register ALU instructions, milestone 3 adds immediate ALU
+// instructions, and milestone 5 adds branch, JAL, and JALR decode.
 //
 // Each legal instruction checks its register fields and control outputs.
 // Reserved encodings must remain illegal with architectural writes disabled.
@@ -27,6 +27,9 @@ module rv32_decoder_tb;
   operand_a_sel_e   operand_a_sel;
   operand_b_sel_e   operand_b_sel;
   imm_kind_e        imm_kind;
+  branch_op_e       branch_op;
+  control_flow_e    control_flow;
+  writeback_sel_e   writeback_sel;
   logic             reg_write;
   logic             ebreak;
   logic             illegal;
@@ -43,6 +46,9 @@ module rv32_decoder_tb;
     .operand_a_sel_o(operand_a_sel),
     .operand_b_sel_o(operand_b_sel),
     .imm_kind_o     (imm_kind),
+    .branch_op_o    (branch_op),
+    .control_flow_o (control_flow),
+    .writeback_sel_o(writeback_sel),
     .reg_write_o    (reg_write),
     .ebreak_o       (ebreak),
     .illegal_o      (illegal)
@@ -71,6 +77,9 @@ module rv32_decoder_tb;
           operand_a_sel !== expected_a_sel ||
           operand_b_sel !== expected_b_sel ||
           imm_kind !== expected_imm_kind ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_ALU ||
           reg_write !== 1'b1 ||
           ebreak !== 1'b0 ||
           illegal !== 1'b0) begin
@@ -104,7 +113,14 @@ module rv32_decoder_tb;
     begin
       instr = 32'h00100073;
       #1;
-      if (ebreak !== 1'b1 || illegal !== 1'b0 || reg_write !== 1'b0 || rs1_used !== 1'b0 || rs2_used !== 1'b0) begin
+      if (ebreak !== 1'b1 ||
+          illegal !== 1'b0 ||
+          reg_write !== 1'b0 ||
+          rs1_used !== 1'b0 ||
+          rs2_used !== 1'b0 ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_ALU) begin
         $error("EBREAK test failed: ebreak=%b illegal=%b reg_write=%b rs1_used=%b rs2_used=%b",
                ebreak, illegal, reg_write, rs1_used, rs2_used);
         errors++;
@@ -122,8 +138,76 @@ module rv32_decoder_tb;
 
       if (illegal !== 1'b1 ||
           reg_write !== 1'b0 ||
-          ebreak !== 1'b0) begin
+          ebreak !== 1'b0 ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_ALU) begin
         $error("Test %s failed: unsafe illegal decode", test_name);
+        errors++;
+      end
+    end
+  endtask
+
+  task automatic check_branch_decode(
+    input string       test_name,
+    input logic [31:0] instr_i,
+    input branch_op_e  expected_branch_op
+  );
+    begin
+      instr = instr_i;
+      #1;
+
+      if (rs1_addr !== 5'd1 ||
+          rs2_addr !== 5'd2 ||
+          rs1_used !== 1'b1 ||
+          rs2_used !== 1'b1 ||
+          alu_op !== ALU_ADD ||
+          operand_a_sel !== OP_A_PC ||
+          operand_b_sel !== OP_B_IMM ||
+          imm_kind !== IMM_B ||
+          branch_op !== expected_branch_op ||
+          control_flow !== CF_BRANCH ||
+          writeback_sel !== WB_ALU ||
+          reg_write !== 1'b0 ||
+          ebreak !== 1'b0 ||
+          illegal !== 1'b0) begin
+        $error("Test %s failed: branch decode mismatch", test_name);
+        errors++;
+      end
+    end
+  endtask
+
+  task automatic check_jump_decode(
+    input string       test_name,
+    input logic [31:0] instr_i,
+    input control_flow_e expected_control_flow,
+    input operand_a_sel_e expected_a_sel,
+    input imm_kind_e expected_imm_kind,
+    input logic expected_rs1_used
+  );
+    begin
+      instr = instr_i;
+      #1;
+
+      if (rd_addr !== 5'd3 ||
+          rs1_used !== expected_rs1_used ||
+          rs2_used !== 1'b0 ||
+          alu_op !== ALU_ADD ||
+          operand_a_sel !== expected_a_sel ||
+          operand_b_sel !== OP_B_IMM ||
+          imm_kind !== expected_imm_kind ||
+          branch_op !== BR_EQ ||
+          control_flow !== expected_control_flow ||
+          writeback_sel !== WB_PC_PLUS_4 ||
+          reg_write !== 1'b1 ||
+          ebreak !== 1'b0 ||
+          illegal !== 1'b0) begin
+        $error("Test %s failed: jump decode mismatch", test_name);
+        errors++;
+      end
+
+      if (expected_rs1_used && rs1_addr !== 5'd1) begin
+        $error("Test %s rs1 failed: expected=1 got=%0d", test_name, rs1_addr);
         errors++;
       end
     end
@@ -191,6 +275,22 @@ module rv32_decoder_tb;
     end
   endtask
 
+  task automatic test_milestone_5;
+    begin
+      check_branch_decode("BEQ",  32'h00208463, BR_EQ);
+      check_branch_decode("BNE",  32'h00209463, BR_NE);
+      check_branch_decode("BLT",  32'h0020c463, BR_LT);
+      check_branch_decode("BGE",  32'h0020d463, BR_GE);
+      check_branch_decode("BLTU", 32'h0020e463, BR_LTU);
+      check_branch_decode("BGEU", 32'h0020f463, BR_GEU);
+
+      check_jump_decode("JAL", 32'h008001ef, CF_JAL, OP_A_PC, IMM_J, 1'b0);
+      check_jump_decode("JALR", 32'h008081e7, CF_JALR, OP_A_RS1, IMM_I, 1'b1);
+
+      check_illegal("reserved branch funct3", 32'h0020a463);
+      check_illegal("reserved JALR funct3", 32'h008091e7);
+    end
+  endtask
 
   initial begin
     instr = 32'd0;
@@ -199,6 +299,7 @@ module rv32_decoder_tb;
     test_milestone_1();
     test_milestone_2();
     test_milestone_3();
+    test_milestone_5();
 
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");

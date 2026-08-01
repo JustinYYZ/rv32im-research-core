@@ -2,8 +2,8 @@
 //
 // RV32I instruction decoder.
 //
-// Current support includes every RV32I register-register and immediate ALU
-// instruction, plus LUI, AUIPC, and EBREAK.
+// Current support includes RV32I integer ALU and control-flow instructions,
+// plus LUI, AUIPC, and EBREAK.
 // The decoder extracts register addresses and converts instruction encoding
 // fields into internal control signals. It does not read registers, calculate
 // results, update the PC, or write architectural state.
@@ -27,6 +27,10 @@ module rv32_decoder (
     output rv32_pkg::operand_b_sel_e    operand_b_sel_o,
     output rv32_pkg::imm_kind_e         imm_kind_o,
 
+    output rv32_pkg::branch_op_e        branch_op_o,
+    output rv32_pkg::control_flow_e     control_flow_o,
+    output rv32_pkg::writeback_sel_e    writeback_sel_o,
+
     output logic                        reg_write_o,
     output logic                        ebreak_o,
     output logic                        illegal_o
@@ -36,6 +40,7 @@ module rv32_decoder (
   logic [6:0] opcode;
   logic [2:0] funct3;
   logic [6:0] funct7;
+  logic       branch_valid;
 
   assign funct7     = instr_i[31:25];
   assign rs2_addr_o = instr_i[24:20];
@@ -51,9 +56,16 @@ module rv32_decoder (
     operand_a_sel_o = rv32_pkg::OP_A_ZERO;
     operand_b_sel_o = rv32_pkg::OP_B_RS2;
     imm_kind_o = rv32_pkg::IMM_NONE;
+    branch_valid = 1'b0;
+
+    branch_op_o = rv32_pkg::BR_EQ;
+    control_flow_o = rv32_pkg::CF_NONE;
+    writeback_sel_o = rv32_pkg::WB_ALU;
+
     reg_write_o = 1'b0;
     ebreak_o = 1'b0;
     illegal_o = 1'b1;
+
     case(opcode)
       rv32_pkg::OPCODE_OP: begin
         case(funct3)
@@ -269,6 +281,70 @@ module rv32_decoder (
       rv32_pkg::OPCODE_SYSTEM: begin
         if(instr_i == 32'h00100073) begin // EBREAK instruction encoding
           ebreak_o = 1'b1;
+          illegal_o = 1'b0;
+        end
+      end
+      rv32_pkg::OPCODE_BRANCH: begin
+        case(funct3)
+          3'b000: begin
+            branch_op_o = rv32_pkg::BR_EQ;
+            branch_valid = 1'b1;
+          end
+          3'b001: begin
+            branch_op_o = rv32_pkg::BR_NE;
+            branch_valid = 1'b1;
+          end
+          3'b100: begin
+            branch_op_o = rv32_pkg::BR_LT;
+            branch_valid = 1'b1;
+          end
+          3'b101: begin
+            branch_op_o = rv32_pkg::BR_GE;
+            branch_valid = 1'b1;
+          end
+          3'b110: begin
+            branch_op_o = rv32_pkg::BR_LTU;
+            branch_valid = 1'b1;
+          end
+          3'b111: begin
+            branch_op_o = rv32_pkg::BR_GEU;
+            branch_valid = 1'b1;
+          end
+          default: begin
+            branch_valid = 1'b0; // Reserved funct3 encoding
+          end
+        endcase
+        if (branch_valid) begin
+          alu_op_o = rv32_pkg::ALU_ADD;
+          operand_a_sel_o = rv32_pkg::OP_A_PC;
+          operand_b_sel_o = rv32_pkg::OP_B_IMM;
+          imm_kind_o = rv32_pkg::IMM_B;
+          control_flow_o = rv32_pkg::CF_BRANCH;
+          rs1_used_o = 1'b1;
+          rs2_used_o = 1'b1;
+          illegal_o = 1'b0;
+        end
+      end
+      rv32_pkg::OPCODE_JAL: begin
+        alu_op_o = rv32_pkg::ALU_ADD;
+        operand_a_sel_o = rv32_pkg::OP_A_PC;
+        operand_b_sel_o = rv32_pkg::OP_B_IMM;
+        imm_kind_o = rv32_pkg::IMM_J;
+        control_flow_o = rv32_pkg::CF_JAL;
+        writeback_sel_o = rv32_pkg::WB_PC_PLUS_4;
+        reg_write_o = 1'b1;
+        illegal_o = 1'b0;
+      end
+      rv32_pkg::OPCODE_JALR: begin
+        if (funct3 == 3'b000) begin
+          alu_op_o = rv32_pkg::ALU_ADD;
+          operand_a_sel_o = rv32_pkg::OP_A_RS1;
+          operand_b_sel_o = rv32_pkg::OP_B_IMM;
+          imm_kind_o = rv32_pkg::IMM_I;
+          control_flow_o = rv32_pkg::CF_JALR;
+          writeback_sel_o = rv32_pkg::WB_PC_PLUS_4;
+          rs1_used_o = 1'b1;
+          reg_write_o = 1'b1;
           illegal_o = 1'b0;
         end
       end
