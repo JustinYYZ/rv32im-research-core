@@ -258,6 +258,7 @@ Decoder 可以始终提取这些位置，但必须用 `rs1_used` 和 `rs2_used` 
 | `writeback_sel_e` | ALU、PC_PLUS_4、MEM | writeback mux |
 | `mem_op_e` | NONE、LOAD、STORE | decoder → LSU |
 | `mem_size_e` | BYTE、HALF、WORD | decoder → LSU |
+| `system_op_e` | NONE、ECALL、EBREAK、FENCE | decoder → core control |
 
 枚举默认值本身不等于安全控制。Decoder 仍必须在每次组合计算开始时显式选择
 `MEM_NONE`、`CF_NONE` 和关闭写使能。
@@ -412,7 +413,7 @@ Decoder 输入 `instr_i[31:0]`，输出：
 - control-flow 和 branch operation；
 - writeback selector；
 - memory operation、size 和 load unsigned；
-- register write、EBREAK/ECALL 等事件；
+- register write 和统一的 system event；
 - illegal。
 
 字段提取可使用连续赋值，与组合 decode 并行发生。
@@ -491,13 +492,12 @@ writeback     = WB_ALU
 SLTIU 的 immediate 仍先按 I-type 符号扩展到 32 bit，然后把两个 32-bit operand 当
 unsigned 比较。
 
-### 8.5 LUI、AUIPC 和 EBREAK
+### 8.5 LUI 和 AUIPC
 
 | 指令 | 数据来源与结果 | 关键控制 |
 |---|---|---|
 | LUI | `rd = imm_u` | A=ZERO、B=IMM、ALU_ADD、IMM_U、reg_write=1 |
 | AUIPC | `rd = pc + imm_u` | A=PC、B=IMM、ALU_ADD、IMM_U、reg_write=1 |
-| EBREAK | 产生 breakpoint event，不写 rd/内存 | 完整 encoding `0x00100073` |
 
 ### 8.6 Decoder TB
 
@@ -525,7 +525,6 @@ mem_op=MEM_NONE、illegal=1。
 | `0x4040d193` | `SRAI x3, x1, 4` |
 | `0x123451b7` | `LUI x3, 0x12345` |
 | `0x12345197` | `AUIPC x3, 0x12345` |
-| `0x00100073` | `EBREAK` |
 
 ## 9. 阶段六：实现 branch、JAL 和 JALR
 
@@ -777,8 +776,8 @@ signed half = {{16{selected_half[15]}}, selected_half}
 
 ECALL 完整 encoding 为 `0x00000073`。它不读普通源寄存器、不写 rd、不访问内存，
 而是向 core control 报告 environment call。若项目尚未实现 privileged trap state，
-可以先输出 `ecall_o`，由 testbench 或 bare-metal environment 观察；不能把它误当作
-普通 ALU 指令。
+可以先输出 `SYS_ECALL` 事件，由 testbench 或 bare-metal environment 观察；不能把它
+误当作普通 ALU 指令。
 
 ### 11.2 EBREAK
 
@@ -792,13 +791,27 @@ operation 在先前相关 operation 可观察之后发生。
 
 在阻塞式、一次只允许一个 memory request 的顺序 core 中，实现步骤为：
 
-1. Decoder 识别 FENCE 并输出 `fence_o`；
+1. Decoder 识别 FENCE 并输出 `SYS_FENCE`；
 2. 不读取 rs1/rs2，不写 rd，不产生 memory write；
 3. Core 只有在先前 memory request 已完成且接口 idle 时允许 FENCE 完成；
 4. FENCE 完成后才允许后续 memory instruction 发起请求。
 
 如果 core 尚无 memory handshake，就不能仅靠 decoder 声称实现了 FENCE。FENCE.I 属于
 Zifencei，不在本教程范围内。
+
+建议不要为每种事件分别增加一个布尔输出，而是在 package 中定义互斥枚举：
+
+```systemverilog
+typedef enum logic [1:0] {
+  SYS_NONE,
+  SYS_ECALL,
+  SYS_EBREAK,
+  SYS_FENCE
+} system_op_e;
+```
+
+Decoder 在组合逻辑开头选择 `SYS_NONE`，只对支持的完整 encoding 改为对应事件。这样
+普通指令和非法指令都不会残留上一次的 system event，也不会同时声明多个互斥事件。
 
 ### 11.4 测试
 

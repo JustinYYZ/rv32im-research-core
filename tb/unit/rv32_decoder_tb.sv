@@ -4,9 +4,8 @@
 //
 // Tests are grouped into cumulative milestones so later decoder changes keep
 // exercising all earlier instructions. Milestone 1 covers the initial ADD,
-// SUB, ADDI, LUI, AUIPC, and EBREAK subset. Milestone 2 adds the remaining
-// register-register ALU instructions, milestone 3 adds immediate ALU
-// instructions, milestone 5 adds control flow, and milestone 6 adds load/store.
+// SUB, ADDI, LUI, and AUIPC subset. Later groups add register and immediate ALU
+// operations, control flow, load/store, and system or memory-ordering events.
 //
 // Each legal instruction checks its register fields and control outputs.
 // Reserved encodings must remain illegal with architectural writes disabled.
@@ -34,8 +33,8 @@ module rv32_decoder_tb;
   mem_size_e        mem_size;
   logic             load_unsigned;
   logic             reg_write;
-  logic             ebreak;
   logic             illegal;
+  system_op_e       system_op;
   int unsigned errors;
 
   rv32_decoder dut (
@@ -56,8 +55,8 @@ module rv32_decoder_tb;
     .mem_size_o     (mem_size),
     .load_unsigned_o(load_unsigned),
     .reg_write_o    (reg_write),
-    .ebreak_o       (ebreak),
-    .illegal_o      (illegal)
+    .illegal_o      (illegal),
+    .system_op_o    (system_op)
   );
 
   task automatic check_decoder(
@@ -90,7 +89,7 @@ module rv32_decoder_tb;
           mem_size !== MEM_BYTE ||
           load_unsigned !== 1'b0 ||
           reg_write !== 1'b1 ||
-          ebreak !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
 
         $error("Test %s control outputs failed for instr=%h",
@@ -117,24 +116,33 @@ module rv32_decoder_tb;
       end
     end
   endtask
-  
-  task automatic check_ebreak;
+
+  task automatic check_system_decode(
+    input string             test_name,
+    input logic [31:0]       instr_i,
+    input system_op_e        expected_system_op
+  );
     begin
-      instr = 32'h00100073;
+      instr = instr_i;
       #1;
-      if (ebreak !== 1'b1 ||
+
+      if (system_op !== expected_system_op ||
           illegal !== 1'b0 ||
           reg_write !== 1'b0 ||
           rs1_used !== 1'b0 ||
           rs2_used !== 1'b0 ||
+          alu_op !== ALU_ADD ||
+          operand_a_sel !== OP_A_ZERO ||
+          operand_b_sel !== OP_B_RS2 ||
+          imm_kind !== IMM_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
           mem_op !== MEM_NONE ||
           mem_size !== MEM_BYTE ||
           load_unsigned !== 1'b0) begin
-        $error("EBREAK test failed: ebreak=%b illegal=%b reg_write=%b rs1_used=%b rs2_used=%b",
-               ebreak, illegal, reg_write, rs1_used, rs2_used);
+        $error("Test %s failed: system decode mismatch (system_op=%b illegal=%b reg_write=%b rs1_used=%b rs2_used=%b)",
+               test_name, system_op, illegal, reg_write, rs1_used, rs2_used);
         errors++;
       end
     end
@@ -150,7 +158,9 @@ module rv32_decoder_tb;
 
       if (illegal !== 1'b1 ||
           reg_write !== 1'b0 ||
-          ebreak !== 1'b0 ||
+          rs1_used !== 1'b0 ||
+          rs2_used !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
@@ -187,7 +197,7 @@ module rv32_decoder_tb;
           mem_size !== MEM_BYTE ||
           load_unsigned !== 1'b0 ||
           reg_write !== 1'b0 ||
-          ebreak !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
         $error("Test %s failed: branch decode mismatch", test_name);
         errors++;
@@ -221,7 +231,7 @@ module rv32_decoder_tb;
           mem_size !== MEM_BYTE ||
           load_unsigned !== 1'b0 ||
           reg_write !== 1'b1 ||
-          ebreak !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
         $error("Test %s failed: jump decode mismatch", test_name);
         errors++;
@@ -259,7 +269,7 @@ module rv32_decoder_tb;
           mem_size !== expected_mem_size ||
           load_unsigned !== expected_load_unsigned ||
           reg_write !== 1'b1 ||
-          ebreak !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
         $error("Test %s failed: load decode mismatch", test_name);
         errors++;
@@ -291,7 +301,7 @@ module rv32_decoder_tb;
           mem_size !== expected_mem_size ||
           load_unsigned !== 1'b0 ||
           reg_write !== 1'b0 ||
-          ebreak !== 1'b0 ||
+          system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
         $error("Test %s failed: store decode mismatch", test_name);
         errors++;
@@ -311,7 +321,6 @@ module rv32_decoder_tb;
                    ALU_ADD, OP_A_ZERO, OP_B_IMM, IMM_U);
       check_decoder("AUIPC", 32'h12345197, 5'd0, 5'd0, 5'd3, 1'b0, 1'b0,
                    ALU_ADD, OP_A_PC, OP_B_IMM, IMM_U);
-      check_ebreak();
       check_illegal("all-zero instruction", 32'h00000000);
       check_illegal("reserved RV32IM OP encoding", 32'h042081b3);
     end
@@ -397,6 +406,20 @@ module rv32_decoder_tb;
     end
   endtask
 
+  task automatic test_system_decode;
+    begin
+      // Legal environment and ordering events must remain free of register and
+      // memory side effects. Nearby unsupported encodings must remain illegal.
+      check_system_decode("ECALL",  32'h00000073, SYS_ECALL);
+      check_system_decode("EBREAK", 32'h00100073, SYS_EBREAK);
+      check_system_decode("FENCE",  32'h0ff0000f, SYS_FENCE);
+      check_system_decode("FENCE.TSO",  32'h8330000f, SYS_FENCE);
+
+      check_illegal("FENCE.I unsupported",  32'h0000100f);
+      check_illegal("unsupported SYSTEM immediate", 32'h00200073);
+    end
+  endtask
+
   initial begin
     instr = 32'd0;
     errors = 0;
@@ -406,6 +429,7 @@ module rv32_decoder_tb;
     test_milestone_3();
     test_milestone_5();
     test_milestone_6();
+    test_system_decode();
 
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");

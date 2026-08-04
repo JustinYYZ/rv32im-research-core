@@ -84,6 +84,16 @@ package rv32_pkg;
     IMM_J
   } imm_kind_e;
 
+  // Environment and memory-ordering events are kept separate from ALU,
+  // control-flow, and memory-access controls. The core handles their eventual
+  // architectural behavior after decode.
+  typedef enum logic [1:0] {
+    SYS_NONE,
+    SYS_ECALL,
+    SYS_EBREAK,
+    SYS_FENCE
+  } system_op_e;
+
   localparam logic [6:0] OPCODE_OP       = 7'b0110011;
   localparam logic [6:0] OPCODE_OP_IMM   = 7'b0010011;
   localparam logic [6:0] OPCODE_LUI      = 7'b0110111;

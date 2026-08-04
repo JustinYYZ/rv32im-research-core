@@ -6,6 +6,8 @@
 CAD_ENV   ?=
 IVERILOG  ?= iverilog
 VVP       ?= vvp
+VERILATOR ?= verilator
+YOSYS     ?= yosys
 BUILD_DIR ?= build
 
 # Leave CAD_ENV empty when the tools are already on PATH. A machine-specific
@@ -47,7 +49,8 @@ LSU_SRCS := \
 	rtl/backend/rv32_lsu.sv \
 	tb/unit/rv32_lsu_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu tools clean
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
+	check-decoder lint-decoder synth-decoder tools clean
 
 test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu
 
@@ -83,6 +86,19 @@ $(DECODER_TEST): $(DECODER_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_decoder_tb -o $@ $(DECODER_SRCS)'
 
+# Run the decoder simulation, lint its RTL and testbench, and verify that the
+# synthesizable decoder hierarchy passes Yosys structural checks.
+check-decoder: test-decoder lint-decoder synth-decoder
+
+lint-decoder:
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal $(DECODER_SRCS)'
+
+synth-decoder:
+	bash -c '$(ENV_SETUP) \
+		$(YOSYS) -q -p "read_verilog -sv rtl/pkg/rv32_pkg.sv rtl/frontend/rv32_decoder.sv; \
+		hierarchy -check -top rv32_decoder; proc; opt; check"'
+
 test-branch-unit: $(BRANCH_UNIT_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
 
@@ -102,7 +118,9 @@ $(LSU_TEST): $(LSU_SRCS)
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
-		printf "vvp:      " && command -v $(VVP)'
+		printf "vvp:      " && command -v $(VVP) && \
+		printf "verilator: " && command -v $(VERILATOR) && \
+		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) $(BRANCH_UNIT_TEST) $(LSU_TEST)

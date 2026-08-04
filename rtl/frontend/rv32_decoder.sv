@@ -3,7 +3,7 @@
 // RV32I instruction decoder.
 //
 // Current support includes RV32I integer ALU, control-flow, and load/store
-// instructions, plus LUI, AUIPC, and EBREAK.
+// instructions; LUI and AUIPC; and decode events for ECALL, EBREAK, and FENCE.
 // The decoder extracts register addresses and converts instruction encoding
 // fields into internal control signals. It does not read registers, calculate
 // results, update the PC, or write architectural state.
@@ -36,8 +36,8 @@ module rv32_decoder (
     output logic                        load_unsigned_o,
 
     output logic                        reg_write_o,
-    output logic                        ebreak_o,
-    output logic                        illegal_o
+    output logic                        illegal_o,
+    output rv32_pkg::system_op_e        system_op_o
 );
 
   // These fields are shared by the supported R- and I-type encodings.
@@ -73,8 +73,8 @@ module rv32_decoder (
     load_unsigned_o = 1'b0;
 
     reg_write_o = 1'b0;
-    ebreak_o = 1'b0;
     illegal_o = 1'b1;
+    system_op_o = rv32_pkg::SYS_NONE;
 
     case(opcode)
       rv32_pkg::OPCODE_OP: begin
@@ -288,12 +288,6 @@ module rv32_decoder (
         reg_write_o = 1'b1;
         illegal_o = 1'b0;
       end
-      rv32_pkg::OPCODE_SYSTEM: begin
-        if(instr_i == 32'h00100073) begin // EBREAK instruction encoding
-          ebreak_o = 1'b1;
-          illegal_o = 1'b0;
-        end
-      end
       // Loads use rs1 + I-type immediate as the byte address and write the
       // formatted memory result to rd.
       rv32_pkg::OPCODE_LOAD: begin
@@ -358,6 +352,9 @@ module rv32_decoder (
             rs1_used_o = 1'b1;
             illegal_o = 1'b0;
           end
+          default: begin
+            // Reserved load widths retain the safe defaults above.
+          end
         endcase
       end
       // Stores use rs1 + S-type immediate as the byte address and rs2 as write
@@ -393,6 +390,9 @@ module rv32_decoder (
             rs1_used_o = 1'b1;
             rs2_used_o = 1'b1;
             illegal_o = 1'b0;
+          end
+          default: begin
+            // Reserved store widths retain the safe defaults above.
           end
         endcase
       end
@@ -460,6 +460,28 @@ module rv32_decoder (
           reg_write_o = 1'b1;
           illegal_o = 1'b0;
         end
+      end
+      rv32_pkg::OPCODE_SYSTEM: begin
+        // ECALL and EBREAK use fixed encodings. They report an event without
+        // enabling register or memory side effects.
+        if (instr_i == 32'h00000073) begin
+          system_op_o = rv32_pkg::SYS_ECALL;
+          illegal_o = 1'b0;
+        end else if (instr_i == 32'h00100073) begin
+          system_op_o = rv32_pkg::SYS_EBREAK;
+          illegal_o = 1'b0;
+        end
+      end
+      rv32_pkg::OPCODE_MISC_MEM: begin
+        // FENCE.I uses funct3=001 and remains unsupported. FENCE variants with
+        // funct3=000 are reported to the core as one ordering-event class.
+        if (funct3 == 3'b000) begin
+          system_op_o = rv32_pkg::SYS_FENCE;
+          illegal_o = 1'b0;
+        end
+      end
+      default: begin
+        // Unknown opcodes retain illegal_o and all safe side-effect defaults.
       end
     endcase
   end

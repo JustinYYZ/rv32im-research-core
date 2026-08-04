@@ -127,7 +127,8 @@ self-checking unit tests:
 - I-, S-, B-, U-, and J-type immediate generation;
 - decoder support for all RV32I register-register and immediate ALU
   instructions, conditional branches, JAL, JALR, loads, and stores, plus LUI,
-  AUIPC, and EBREAK;
+  AUIPC, and decode events for ECALL, EBREAK, FENCE, and FENCE.TSO; FENCE.I is
+  not supported;
 - a combinational load/store formatting unit with address-alignment checks,
   store byte enables, and signed or unsigned load extension.
 
@@ -141,6 +142,12 @@ If the simulation tools require an environment setup script:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test
+```
+
+Run decoder simulation, lint, and synthesis sanity checks together with:
+
+```bash
+make CAD_ENV=/path/to/env.sh check-decoder
 ```
 
 The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
@@ -272,7 +279,8 @@ scripts/             构建、回归、综合和结果处理脚本
 - 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
 - I、S、B、U 和 J-type immediate 生成；
 - decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令、conditional
-  branch、JAL、JALR、load 和 store，以及 LUI、AUIPC 和 EBREAK；
+  branch、JAL、JALR、load 和 store，以及 LUI、AUIPC；同时能够识别 ECALL、
+  EBREAK、FENCE 和 FENCE.TSO 事件；暂不支持 FENCE.I；
 - 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和
   signed/unsigned load extension。
 
@@ -286,6 +294,12 @@ make test
 
 ```bash
 make CAD_ENV=/path/to/env.sh test
+```
+
+同时运行 decoder 仿真、lint 和综合完整性检查：
+
+```bash
+make CAD_ENV=/path/to/env.sh check-decoder
 ```
 
 [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
