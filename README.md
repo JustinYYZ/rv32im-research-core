@@ -126,8 +126,10 @@ self-checking unit tests:
 - 32 × 32-bit architectural register file with two read ports and one write port;
 - I-, S-, B-, U-, and J-type immediate generation;
 - decoder support for all RV32I register-register and immediate ALU
-  instructions, conditional branches, JAL, and JALR, plus LUI, AUIPC, and
-  EBREAK.
+  instructions, conditional branches, JAL, JALR, loads, and stores, plus LUI,
+  AUIPC, and EBREAK;
+- a combinational load/store formatting unit with address-alignment checks,
+  store byte enables, and signed or unsigned load extension.
 
 Run the current regression with:
 
@@ -141,8 +143,8 @@ If the simulation tools require an environment setup script:
 make CAD_ENV=/path/to/env.sh test
 ```
 
-The [RV32IM decoder table](docs/rv32im-decode-table.md) summarizes instruction formats,
-encodings, immediate construction, and planned decoder behavior.
+The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
+encodings, datapath responsibilities, module implementation steps, and required unit tests.
 
 ### License
 
@@ -270,7 +272,9 @@ scripts/             构建、回归、综合和结果处理脚本
 - 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
 - I、S、B、U 和 J-type immediate 生成；
 - decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令、conditional
-  branch、JAL 和 JALR，以及 LUI、AUIPC 和 EBREAK。
+  branch、JAL、JALR、load 和 store，以及 LUI、AUIPC 和 EBREAK；
+- 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和
+  signed/unsigned load extension。
 
 运行当前全部测试：
 
@@ -284,8 +288,8 @@ make test
 make CAD_ENV=/path/to/env.sh test
 ```
 
-[RV32IM decoder 对照表](docs/rv32im-decode-table.md)汇总了指令格式、编码、
-immediate 拼接方式和计划中的 decoder 行为。
+[RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
+逐模块实现步骤和必须完成的单元测试。
 
 ### 开源许可证
 

@@ -41,9 +41,15 @@ BRANCH_UNIT_SRCS := \
 	rtl/backend/rv32_branch_unit.sv \
 	tb/unit/rv32_branch_unit_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit tools clean
+LSU_TEST := $(BUILD_DIR)/rv32_lsu_tb
+LSU_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/backend/rv32_lsu.sv \
+	tb/unit/rv32_lsu_tb.sv
 
-test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu tools clean
+
+test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -85,10 +91,18 @@ $(BRANCH_UNIT_TEST): $(BRANCH_UNIT_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_branch_unit_tb -o $@ $(BRANCH_UNIT_SRCS)'
 
+test-lsu: $(LSU_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(LSU_TEST): $(LSU_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_lsu_tb -o $@ $(LSU_SRCS)'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
 		printf "vvp:      " && command -v $(VVP)'
 
 clean:
-	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) $(BRANCH_UNIT_TEST)
+	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) $(BRANCH_UNIT_TEST) $(LSU_TEST)

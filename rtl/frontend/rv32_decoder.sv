@@ -2,14 +2,14 @@
 //
 // RV32I instruction decoder.
 //
-// Current support includes RV32I integer ALU and control-flow instructions,
-// plus LUI, AUIPC, and EBREAK.
+// Current support includes RV32I integer ALU, control-flow, and load/store
+// instructions, plus LUI, AUIPC, and EBREAK.
 // The decoder extracts register addresses and converts instruction encoding
 // fields into internal control signals. It does not read registers, calculate
 // results, update the PC, or write architectural state.
 //
 // Outputs start at safe defaults. Unsupported or reserved encodings therefore
-// leave illegal_o asserted without enabling an architectural register write.
+// leave illegal_o asserted without enabling register or memory side effects.
 
 `timescale 1ns/1ps
 
@@ -30,6 +30,10 @@ module rv32_decoder (
     output rv32_pkg::branch_op_e        branch_op_o,
     output rv32_pkg::control_flow_e     control_flow_o,
     output rv32_pkg::writeback_sel_e    writeback_sel_o,
+
+    output rv32_pkg::mem_op_e           mem_op_o,
+    output rv32_pkg::mem_size_e         mem_size_o,
+    output logic                        load_unsigned_o,
 
     output logic                        reg_write_o,
     output logic                        ebreak_o,
@@ -61,6 +65,12 @@ module rv32_decoder (
     branch_op_o = rv32_pkg::BR_EQ;
     control_flow_o = rv32_pkg::CF_NONE;
     writeback_sel_o = rv32_pkg::WB_ALU;
+
+    // MEM_BYTE is only a placeholder while MEM_NONE is selected. Keeping every
+    // output deterministic avoids latches and makes illegal decode safe.
+    mem_op_o = rv32_pkg::MEM_NONE;
+    mem_size_o = rv32_pkg::MEM_BYTE;
+    load_unsigned_o = 1'b0;
 
     reg_write_o = 1'b0;
     ebreak_o = 1'b0;
@@ -284,6 +294,109 @@ module rv32_decoder (
           illegal_o = 1'b0;
         end
       end
+      // Loads use rs1 + I-type immediate as the byte address and write the
+      // formatted memory result to rd.
+      rv32_pkg::OPCODE_LOAD: begin
+        case(funct3)
+          3'b000: begin
+            mem_op_o = rv32_pkg::MEM_LOAD;
+            mem_size_o = rv32_pkg::MEM_BYTE;
+            load_unsigned_o = 1'b0;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_I;
+            writeback_sel_o = rv32_pkg::WB_MEM;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b001: begin
+            mem_op_o = rv32_pkg::MEM_LOAD;
+            mem_size_o = rv32_pkg::MEM_HALF;
+            load_unsigned_o = 1'b0;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_I;
+            writeback_sel_o = rv32_pkg::WB_MEM;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b010: begin
+            mem_op_o = rv32_pkg::MEM_LOAD;
+            mem_size_o = rv32_pkg::MEM_WORD;
+            load_unsigned_o = 1'b0;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_I;
+            writeback_sel_o = rv32_pkg::WB_MEM;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b100: begin
+            mem_op_o = rv32_pkg::MEM_LOAD;
+            mem_size_o = rv32_pkg::MEM_BYTE;
+            load_unsigned_o = 1'b1;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_I;
+            writeback_sel_o = rv32_pkg::WB_MEM;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b101: begin
+            mem_op_o = rv32_pkg::MEM_LOAD;
+            mem_size_o = rv32_pkg::MEM_HALF;
+            load_unsigned_o = 1'b1;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_I;
+            writeback_sel_o = rv32_pkg::WB_MEM;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+        endcase
+      end
+      // Stores use rs1 + S-type immediate as the byte address and rs2 as write
+      // data. They never write an architectural destination register.
+      rv32_pkg::OPCODE_STORE: begin
+        case(funct3)
+          3'b000: begin
+            mem_op_o = rv32_pkg::MEM_STORE;
+            mem_size_o = rv32_pkg::MEM_BYTE;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_S;
+            rs1_used_o = 1'b1;
+            rs2_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b001: begin
+            mem_op_o = rv32_pkg::MEM_STORE;
+            mem_size_o = rv32_pkg::MEM_HALF;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_S;
+            rs1_used_o = 1'b1;
+            rs2_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+          3'b010: begin
+            mem_op_o = rv32_pkg::MEM_STORE;
+            mem_size_o = rv32_pkg::MEM_WORD;
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_IMM;
+            imm_kind_o = rv32_pkg::IMM_S;
+            rs1_used_o = 1'b1;
+            rs2_used_o = 1'b1;
+            illegal_o = 1'b0;
+          end
+        endcase
+      end
+
       rv32_pkg::OPCODE_BRANCH: begin
         case(funct3)
           3'b000: begin

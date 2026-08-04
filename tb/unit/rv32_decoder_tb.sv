@@ -6,7 +6,7 @@
 // exercising all earlier instructions. Milestone 1 covers the initial ADD,
 // SUB, ADDI, LUI, AUIPC, and EBREAK subset. Milestone 2 adds the remaining
 // register-register ALU instructions, milestone 3 adds immediate ALU
-// instructions, and milestone 5 adds branch, JAL, and JALR decode.
+// instructions, milestone 5 adds control flow, and milestone 6 adds load/store.
 //
 // Each legal instruction checks its register fields and control outputs.
 // Reserved encodings must remain illegal with architectural writes disabled.
@@ -30,6 +30,9 @@ module rv32_decoder_tb;
   branch_op_e       branch_op;
   control_flow_e    control_flow;
   writeback_sel_e   writeback_sel;
+  mem_op_e          mem_op;
+  mem_size_e        mem_size;
+  logic             load_unsigned;
   logic             reg_write;
   logic             ebreak;
   logic             illegal;
@@ -49,6 +52,9 @@ module rv32_decoder_tb;
     .branch_op_o    (branch_op),
     .control_flow_o (control_flow),
     .writeback_sel_o(writeback_sel),
+    .mem_op_o       (mem_op),
+    .mem_size_o     (mem_size),
+    .load_unsigned_o(load_unsigned),
     .reg_write_o    (reg_write),
     .ebreak_o       (ebreak),
     .illegal_o      (illegal)
@@ -80,6 +86,9 @@ module rv32_decoder_tb;
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
+          mem_op !== MEM_NONE ||
+          mem_size !== MEM_BYTE ||
+          load_unsigned !== 1'b0 ||
           reg_write !== 1'b1 ||
           ebreak !== 1'b0 ||
           illegal !== 1'b0) begin
@@ -120,7 +129,10 @@ module rv32_decoder_tb;
           rs2_used !== 1'b0 ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
-          writeback_sel !== WB_ALU) begin
+          writeback_sel !== WB_ALU ||
+          mem_op !== MEM_NONE ||
+          mem_size !== MEM_BYTE ||
+          load_unsigned !== 1'b0) begin
         $error("EBREAK test failed: ebreak=%b illegal=%b reg_write=%b rs1_used=%b rs2_used=%b",
                ebreak, illegal, reg_write, rs1_used, rs2_used);
         errors++;
@@ -141,7 +153,10 @@ module rv32_decoder_tb;
           ebreak !== 1'b0 ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
-          writeback_sel !== WB_ALU) begin
+          writeback_sel !== WB_ALU ||
+          mem_op !== MEM_NONE ||
+          mem_size !== MEM_BYTE ||
+          load_unsigned !== 1'b0) begin
         $error("Test %s failed: unsafe illegal decode", test_name);
         errors++;
       end
@@ -168,6 +183,9 @@ module rv32_decoder_tb;
           branch_op !== expected_branch_op ||
           control_flow !== CF_BRANCH ||
           writeback_sel !== WB_ALU ||
+          mem_op !== MEM_NONE ||
+          mem_size !== MEM_BYTE ||
+          load_unsigned !== 1'b0 ||
           reg_write !== 1'b0 ||
           ebreak !== 1'b0 ||
           illegal !== 1'b0) begin
@@ -199,6 +217,9 @@ module rv32_decoder_tb;
           branch_op !== BR_EQ ||
           control_flow !== expected_control_flow ||
           writeback_sel !== WB_PC_PLUS_4 ||
+          mem_op !== MEM_NONE ||
+          mem_size !== MEM_BYTE ||
+          load_unsigned !== 1'b0 ||
           reg_write !== 1'b1 ||
           ebreak !== 1'b0 ||
           illegal !== 1'b0) begin
@@ -208,6 +229,71 @@ module rv32_decoder_tb;
 
       if (expected_rs1_used && rs1_addr !== 5'd1) begin
         $error("Test %s rs1 failed: expected=1 got=%0d", test_name, rs1_addr);
+        errors++;
+      end
+    end
+  endtask
+
+  task automatic check_load_decode(
+    input string       test_name,
+    input logic [31:0] instr_i,
+    input mem_size_e   expected_mem_size,
+    input logic        expected_load_unsigned
+  );
+    begin
+      instr = instr_i;
+      #1;
+
+      if (rs1_addr !== 5'd1 ||
+          rd_addr !== 5'd3 ||
+          rs1_used !== 1'b1 ||
+          rs2_used !== 1'b0 ||
+          alu_op !== ALU_ADD ||
+          operand_a_sel !== OP_A_RS1 ||
+          operand_b_sel !== OP_B_IMM ||
+          imm_kind !== IMM_I ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_MEM ||
+          mem_op !== MEM_LOAD ||
+          mem_size !== expected_mem_size ||
+          load_unsigned !== expected_load_unsigned ||
+          reg_write !== 1'b1 ||
+          ebreak !== 1'b0 ||
+          illegal !== 1'b0) begin
+        $error("Test %s failed: load decode mismatch", test_name);
+        errors++;
+      end
+    end
+  endtask
+
+  task automatic check_store_decode(
+    input string       test_name,
+    input logic [31:0] instr_i,
+    input mem_size_e   expected_mem_size
+  );
+    begin
+      instr = instr_i;
+      #1;
+
+      if (rs1_addr !== 5'd1 ||
+          rs2_addr !== 5'd2 ||
+          rs1_used !== 1'b1 ||
+          rs2_used !== 1'b1 ||
+          alu_op !== ALU_ADD ||
+          operand_a_sel !== OP_A_RS1 ||
+          operand_b_sel !== OP_B_IMM ||
+          imm_kind !== IMM_S ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_ALU ||
+          mem_op !== MEM_STORE ||
+          mem_size !== expected_mem_size ||
+          load_unsigned !== 1'b0 ||
+          reg_write !== 1'b0 ||
+          ebreak !== 1'b0 ||
+          illegal !== 1'b0) begin
+        $error("Test %s failed: store decode mismatch", test_name);
         errors++;
       end
     end
@@ -292,6 +378,25 @@ module rv32_decoder_tb;
     end
   endtask
 
+  // Milestone 6 covers every supported load/store width and representative
+  // reserved funct3 encodings that must remain free of side effects.
+  task automatic test_milestone_6;
+    begin
+      check_load_decode("LB",  32'h00808183, MEM_BYTE, 1'b0);
+      check_load_decode("LH",  32'h00809183, MEM_HALF, 1'b0);
+      check_load_decode("LW",  32'h0080a183, MEM_WORD, 1'b0);
+      check_load_decode("LBU", 32'h0080c183, MEM_BYTE, 1'b1);
+      check_load_decode("LHU", 32'h0080d183, MEM_HALF, 1'b1);
+
+      check_store_decode("SB", 32'h00208423, MEM_BYTE);
+      check_store_decode("SH", 32'h00209423, MEM_HALF);
+      check_store_decode("SW", 32'h0020a423, MEM_WORD);
+
+      check_illegal("reserved load funct3",  32'h0080b183);
+      check_illegal("reserved store funct3", 32'h0020b423);
+    end
+  endtask
+
   initial begin
     instr = 32'd0;
     errors = 0;
@@ -300,6 +405,7 @@ module rv32_decoder_tb;
     test_milestone_2();
     test_milestone_3();
     test_milestone_5();
+    test_milestone_6();
 
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");

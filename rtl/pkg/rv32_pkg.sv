@@ -46,6 +46,21 @@ package rv32_pkg;
     WB_MEM
   } writeback_sel_e;
 
+  // Describes the memory action carried by a decoded instruction. Using one
+  // enum prevents an instruction from being marked as both a load and store.
+  typedef enum logic [1:0] {
+    MEM_NONE,
+    MEM_LOAD,
+    MEM_STORE
+  } mem_op_e;
+
+  // Access width used by both load extraction and store byte-mask generation.
+  typedef enum logic [1:0] {
+    MEM_BYTE,
+    MEM_HALF,
+    MEM_WORD
+  } mem_size_e;
+
   // Selects the source connected to the ALU's left and right operands.
   // ZERO + immediate implements LUI without adding a separate datapath.
   typedef enum logic [1:0] {
