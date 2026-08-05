@@ -133,6 +133,8 @@ self-checking unit tests:
   store byte enables, and signed or unsigned load extension.
 - a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace
   carry-save tree, with one-request-per-cycle throughput.
+- a single-request RV32M divider using 32-cycle Radix-2 restoring division,
+  signed-magnitude preprocessing, and RISC-V-defined corner-case handling.
 
 Run the current regression with:
 
@@ -158,8 +160,16 @@ Run the same checks for the multiplier with:
 make CAD_ENV=/path/to/env.sh check-multiplier
 ```
 
+Run the same checks for the iterative divider with:
+
+```bash
+make CAD_ENV=/path/to/env.sh check-divider
+```
+
 The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
 encodings, datapath responsibilities, module implementation steps, and required unit tests.
+The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring
+algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
 
 ### License
 
@@ -293,6 +303,8 @@ scripts/             构建、回归、综合和结果处理脚本
   signed/unsigned load extension。
 - 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，
   吞吐率为每周期一条请求。
+- 单请求 RV32M 除法器，使用 32 周期 Radix-2 restoring division，支持
+  signed-magnitude 预处理和 RISC-V 规定的除零、溢出行为。
 
 运行当前全部测试：
 
@@ -318,8 +330,16 @@ make CAD_ENV=/path/to/env.sh check-decoder
 make CAD_ENV=/path/to/env.sh check-multiplier
 ```
 
+同时运行迭代除法器仿真、lint 和综合完整性检查：
+
+```bash
+make CAD_ENV=/path/to/env.sh check-divider
+```
+
 [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
 逐模块实现步骤和必须完成的单元测试。
+[Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、
+signed 转换、架构特殊情况和逐周期实现方法。
 
 ### 开源许可证
 

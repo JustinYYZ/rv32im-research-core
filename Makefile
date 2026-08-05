@@ -55,11 +55,18 @@ MULTIPLIER_SRCS := \
 	rtl/backend/rv32_multiplier.sv \
 	tb/unit/rv32_multiplier_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
-	test-multiplier check-decoder lint-decoder synth-decoder \
-	check-multiplier lint-multiplier synth-multiplier tools clean
+DIVIDER_TEST := $(BUILD_DIR)/rv32_divider_tb
+DIVIDER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/backend/rv32_divider.sv \
+	tb/unit/rv32_divider_tb.sv
 
-test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
+	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
+	check-multiplier lint-multiplier synth-multiplier \
+	check-divider lint-divider synth-divider tools clean
+
+test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -142,6 +149,26 @@ synth-multiplier:
 		$(YOSYS) -q -p "read_verilog -sv rtl/pkg/rv32_pkg.sv rtl/backend/rv32_multiplier.sv; \
 		hierarchy -check -top rv32_multiplier; proc; opt; check"'
 
+# 32-cycle Radix-2 restoring divider regression.
+test-divider: $(DIVIDER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(DIVIDER_TEST): $(DIVIDER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_divider_tb -o $@ $(DIVIDER_SRCS)'
+
+check-divider: test-divider lint-divider synth-divider
+
+lint-divider:
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal $(DIVIDER_SRCS)'
+
+synth-divider:
+	bash -c '$(ENV_SETUP) \
+		$(YOSYS) -q -p "read_verilog -sv rtl/pkg/rv32_pkg.sv rtl/backend/rv32_divider.sv; \
+		hierarchy -check -top rv32_divider; proc; opt; check"'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
@@ -151,4 +178,4 @@ tools:
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
-		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST)
+		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST)

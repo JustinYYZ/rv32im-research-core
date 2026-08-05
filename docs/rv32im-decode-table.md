@@ -860,6 +860,10 @@ Signedness 必须在扩展到 64 bit 之前确定：
 
 ### 12.3 除法特殊情况
 
+除法器的 restoring algorithm、逐周期寄存器变化、signed magnitude 转换、状态机、
+特殊情况和测试顺序见
+[Radix-2 迭代除法器教程](radix2-iterative-divider.md)。
+
 | 条件 | DIV/DIVU | REM/REMU |
 |---|---|---|
 | divisor=0 | `0xffffffff` | dividend |
