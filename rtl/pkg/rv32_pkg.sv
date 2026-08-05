@@ -94,6 +94,21 @@ package rv32_pkg;
     SYS_FENCE
   } system_op_e;
 
+  // RV32M operations share one decode type even though multiplication and
+  // division will be implemented by separate execution units. MD_NONE is the
+  // safe value for every non-RV32M instruction.
+  typedef enum logic [3:0] {
+    MD_NONE,
+    MD_MUL,
+    MD_MULH,
+    MD_MULHSU,
+    MD_MULHU,
+    MD_DIV,
+    MD_DIVU,
+    MD_REM,
+    MD_REMU
+  } muldiv_op_e;
+
   localparam logic [6:0] OPCODE_OP       = 7'b0110011;
   localparam logic [6:0] OPCODE_OP_IMM   = 7'b0010011;
   localparam logic [6:0] OPCODE_LUI      = 7'b0110111;

@@ -823,6 +823,10 @@ Decoder 在组合逻辑开头选择 `SYS_NONE`，只对支持的完整 encoding 
 
 ## 12. 阶段九：实现 RV32M
 
+乘法器的算法原理、33-bit signedness normalization、Radix-4 Booth 分组、carry-save
+compression、三级流水和验证方法见
+[Radix-4 Booth 流水乘法器教程](radix4-booth-multiplier.md)。
+
 ### 12.1 Encoding
 
 所有 M 指令：

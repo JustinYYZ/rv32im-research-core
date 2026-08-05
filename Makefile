@@ -49,10 +49,17 @@ LSU_SRCS := \
 	rtl/backend/rv32_lsu.sv \
 	tb/unit/rv32_lsu_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
-	check-decoder lint-decoder synth-decoder tools clean
+MULTIPLIER_TEST := $(BUILD_DIR)/rv32_multiplier_tb
+MULTIPLIER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/backend/rv32_multiplier.sv \
+	tb/unit/rv32_multiplier_tb.sv
 
-test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
+	test-multiplier check-decoder lint-decoder synth-decoder \
+	check-multiplier lint-multiplier synth-multiplier tools clean
+
+test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -115,6 +122,26 @@ $(LSU_TEST): $(LSU_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_lsu_tb -o $@ $(LSU_SRCS)'
 
+# Three-stage Radix-4 Booth/Wallace multiplier regression.
+test-multiplier: $(MULTIPLIER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(MULTIPLIER_TEST): $(MULTIPLIER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_multiplier_tb -o $@ $(MULTIPLIER_SRCS)'
+
+check-multiplier: test-multiplier lint-multiplier synth-multiplier
+
+lint-multiplier:
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal $(MULTIPLIER_SRCS)'
+
+synth-multiplier:
+	bash -c '$(ENV_SETUP) \
+		$(YOSYS) -q -p "read_verilog -sv rtl/pkg/rv32_pkg.sv rtl/backend/rv32_multiplier.sv; \
+		hierarchy -check -top rv32_multiplier; proc; opt; check"'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
@@ -123,4 +150,5 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
-	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) $(BRANCH_UNIT_TEST) $(LSU_TEST)
+	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
+		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST)

@@ -131,6 +131,8 @@ self-checking unit tests:
   not supported;
 - a combinational load/store formatting unit with address-alignment checks,
   store byte enables, and signed or unsigned load extension.
+- a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace
+  carry-save tree, with one-request-per-cycle throughput.
 
 Run the current regression with:
 
@@ -148,6 +150,12 @@ Run decoder simulation, lint, and synthesis sanity checks together with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh check-decoder
+```
+
+Run the same checks for the multiplier with:
+
+```bash
+make CAD_ENV=/path/to/env.sh check-multiplier
 ```
 
 The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
@@ -283,6 +291,8 @@ scripts/             构建、回归、综合和结果处理脚本
   EBREAK、FENCE 和 FENCE.TSO 事件；暂不支持 FENCE.I；
 - 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和
   signed/unsigned load extension。
+- 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，
+  吞吐率为每周期一条请求。
 
 运行当前全部测试：
 
@@ -300,6 +310,12 @@ make CAD_ENV=/path/to/env.sh test
 
 ```bash
 make CAD_ENV=/path/to/env.sh check-decoder
+```
+
+同时运行乘法器仿真、lint 和综合完整性检查：
+
+```bash
+make CAD_ENV=/path/to/env.sh check-multiplier
 ```
 
 [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
