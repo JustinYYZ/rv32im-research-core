@@ -61,12 +61,45 @@ DIVIDER_SRCS := \
 	rtl/backend/rv32_divider.sv \
 	tb/unit/rv32_divider_tb.sv
 
+REFERENCE_CORE_TEST := $(BUILD_DIR)/rv32_reference_core_tb
+REFERENCE_CORE_RTL_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/core/rv32_reference_core.sv
+
+REFERENCE_CORE_SRCS := \
+	$(REFERENCE_CORE_RTL_SRCS) \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_reference_core_tb.sv
+
+REFERENCE_CORE_TRAP_TEST := $(BUILD_DIR)/rv32_reference_core_trap_tb
+REFERENCE_CORE_TRAP_SRCS := \
+	$(REFERENCE_CORE_RTL_SRCS) \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_reference_core_trap_tb.sv
+
+REFERENCE_CORE_RESET_PC_TEST := $(BUILD_DIR)/rv32_reference_core_reset_pc_tb
+REFERENCE_CORE_RESET_PC_SRCS := \
+	$(REFERENCE_CORE_RTL_SRCS) \
+	tb/core/rv32_reference_core_reset_pc_tb.sv
+
 .PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
 
-test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider
+.PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
+
+test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+	test-reference-core test-reference-core-trap test-reference-core-reset-pc
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -169,6 +202,47 @@ synth-divider:
 		$(YOSYS) -q -p "read_verilog -sv rtl/pkg/rv32_pkg.sv rtl/backend/rv32_divider.sv; \
 		hierarchy -check -top rv32_divider; proc; opt; check"'
 
+compile-reference-core: $(REFERENCE_CORE_TEST)
+
+test-reference-core: $(REFERENCE_CORE_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(REFERENCE_CORE_TEST): $(REFERENCE_CORE_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_reference_core_tb -o $@ $(REFERENCE_CORE_SRCS)'
+
+test-reference-core-trap: $(REFERENCE_CORE_TRAP_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(REFERENCE_CORE_TRAP_TEST): $(REFERENCE_CORE_TRAP_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_reference_core_trap_tb -o $@ $(REFERENCE_CORE_TRAP_SRCS)'
+
+test-reference-core-reset-pc: $(REFERENCE_CORE_RESET_PC_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(REFERENCE_CORE_RESET_PC_TEST): $(REFERENCE_CORE_RESET_PC_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_reference_core_reset_pc_tb -o $@ $(REFERENCE_CORE_RESET_PC_SRCS)'
+
+check-reference-core: test-reference-core test-reference-core-trap test-reference-core-reset-pc lint-reference-core synth-reference-core
+
+lint-reference-core:
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal --top-module rv32_reference_core_tb $(REFERENCE_CORE_SRCS)'
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal --top-module rv32_reference_core_trap_tb $(REFERENCE_CORE_TRAP_SRCS)'
+	bash -c '$(ENV_SETUP) \
+		$(VERILATOR) --lint-only --timing -Wall --Wno-fatal --top-module rv32_reference_core_reset_pc_tb $(REFERENCE_CORE_RESET_PC_SRCS)'
+
+synth-reference-core:
+	bash -c '$(ENV_SETUP) \
+		$(YOSYS) -q -p "read_verilog -sv $(REFERENCE_CORE_RTL_SRCS); \
+		hierarchy -check -top rv32_reference_core; proc; opt; check"'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
@@ -178,4 +252,4 @@ tools:
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
-		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST)
+		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST)

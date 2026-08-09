@@ -26,6 +26,7 @@ module rv32_decoder_tb;
   operand_a_sel_e   operand_a_sel;
   operand_b_sel_e   operand_b_sel;
   imm_kind_e        imm_kind;
+  muldiv_op_e          muldiv_op;
   branch_op_e       branch_op;
   control_flow_e    control_flow;
   writeback_sel_e   writeback_sel;
@@ -56,6 +57,7 @@ module rv32_decoder_tb;
     .load_unsigned_o(load_unsigned),
     .reg_write_o    (reg_write),
     .illegal_o      (illegal),
+    .muldiv_op_o    (muldiv_op),
     .system_op_o    (system_op)
   );
 
@@ -82,6 +84,7 @@ module rv32_decoder_tb;
           operand_a_sel !== expected_a_sel ||
           operand_b_sel !== expected_b_sel ||
           imm_kind !== expected_imm_kind ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
@@ -135,6 +138,7 @@ module rv32_decoder_tb;
           operand_a_sel !== OP_A_ZERO ||
           operand_b_sel !== OP_B_RS2 ||
           imm_kind !== IMM_NONE ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
@@ -161,6 +165,7 @@ module rv32_decoder_tb;
           rs1_used !== 1'b0 ||
           rs2_used !== 1'b0 ||
           system_op !== rv32_pkg::SYS_NONE ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
@@ -190,6 +195,7 @@ module rv32_decoder_tb;
           operand_a_sel !== OP_A_PC ||
           operand_b_sel !== OP_B_IMM ||
           imm_kind !== IMM_B ||
+          muldiv_op !== MD_NONE ||
           branch_op !== expected_branch_op ||
           control_flow !== CF_BRANCH ||
           writeback_sel !== WB_ALU ||
@@ -224,6 +230,7 @@ module rv32_decoder_tb;
           operand_a_sel !== expected_a_sel ||
           operand_b_sel !== OP_B_IMM ||
           imm_kind !== expected_imm_kind ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== expected_control_flow ||
           writeback_sel !== WB_PC_PLUS_4 ||
@@ -262,6 +269,7 @@ module rv32_decoder_tb;
           operand_a_sel !== OP_A_RS1 ||
           operand_b_sel !== OP_B_IMM ||
           imm_kind !== IMM_I ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_MEM ||
@@ -294,6 +302,7 @@ module rv32_decoder_tb;
           operand_a_sel !== OP_A_RS1 ||
           operand_b_sel !== OP_B_IMM ||
           imm_kind !== IMM_S ||
+          muldiv_op !== MD_NONE ||
           branch_op !== BR_EQ ||
           control_flow !== CF_NONE ||
           writeback_sel !== WB_ALU ||
@@ -304,6 +313,38 @@ module rv32_decoder_tb;
           system_op !== rv32_pkg::SYS_NONE ||
           illegal !== 1'b0) begin
         $error("Test %s failed: store decode mismatch", test_name);
+        errors++;
+      end
+    end
+  endtask
+
+  task automatic check_muldiv_decode(
+    input string       test_name,
+    input logic [31:0] instr_i,
+    input logic [4:0]  expected_rd,
+    input muldiv_op_e  expected_muldiv_op
+  );
+    begin
+      instr = instr_i;
+      #1;
+
+      if (rs1_addr !== 5'd1 ||
+          rs2_addr !== 5'd2 ||
+          rs1_used !== 1'b1 ||
+          rs2_used !== 1'b1 ||
+          rd_addr !== expected_rd ||
+          muldiv_op !== expected_muldiv_op ||
+          operand_a_sel !== OP_A_RS1 ||
+          operand_b_sel !== OP_B_RS2 ||
+          imm_kind !== IMM_NONE ||
+          branch_op !== BR_EQ ||
+          control_flow !== CF_NONE ||
+          writeback_sel !== WB_ALU ||
+          mem_op !== MEM_NONE ||
+          reg_write !== 1'b1 ||
+          system_op !== rv32_pkg::SYS_NONE ||
+          illegal !== 1'b0) begin
+        $error("Test %s failed: multiply/divide decode mismatch", test_name);
         errors++;
       end
     end
@@ -420,6 +461,22 @@ module rv32_decoder_tb;
     end
   endtask
 
+  task automatic test_muldiv_decode;
+    begin
+      check_muldiv_decode("MUL",    32'h0220_81b3, 5'd3,  MD_MUL);
+      check_muldiv_decode("MULH",   32'h0220_9233, 5'd4,  MD_MULH);
+      check_muldiv_decode("MULHSU", 32'h0220_a2b3, 5'd5,  MD_MULHSU);
+      check_muldiv_decode("MULHU",  32'h0220_b333, 5'd6,  MD_MULHU);
+      check_muldiv_decode("DIV",    32'h0220_c3b3, 5'd7,  MD_DIV);
+      check_muldiv_decode("DIVU",   32'h0220_d433, 5'd8,  MD_DIVU);
+      check_muldiv_decode("REM",    32'h0220_e4b3, 5'd9,  MD_REM);
+      check_muldiv_decode("REMU",   32'h0220_f533, 5'd10, MD_REMU);
+
+      check_illegal("reserved MUL funct7", 32'h4200a1b3);
+      check_illegal("reserved DIV funct7", 32'h4200b5b3);
+    end
+  endtask
+
   initial begin
     instr = 32'd0;
     errors = 0;
@@ -430,7 +487,7 @@ module rv32_decoder_tb;
     test_milestone_5();
     test_milestone_6();
     test_system_decode();
-
+    test_muldiv_decode();
     if (errors == 0) begin
       $display("rv32_decoder_tb: PASS");
       $finish;

@@ -117,8 +117,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The project is in early implementation. The following components are implemented and covered by
-self-checking unit tests:
+The RV32IM multi-cycle reference core is implemented and covered by self-checking core-level regressions. The five-stage pipeline, caches, and out-of-order core remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -129,12 +128,11 @@ self-checking unit tests:
   instructions, conditional branches, JAL, JALR, loads, and stores, plus LUI,
   AUIPC, and decode events for ECALL, EBREAK, FENCE, and FENCE.TSO; FENCE.I is
   not supported;
-- a combinational load/store formatting unit with address-alignment checks,
-  store byte enables, and signed or unsigned load extension.
-- a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace
-  carry-save tree, with one-request-per-cycle throughput.
-- a single-request RV32M divider using 32-cycle Radix-2 restoring division,
-  signed-magnitude preprocessing, and RISC-V-defined corner-case handling.
+- a combinational load/store formatting unit with address-alignment checks, store byte enables, and signed or unsigned load extension;
+- a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace carry-save tree, with one-request-per-cycle throughput;
+- a single-request RV32M divider using 32-cycle Radix-2 restoring division, signed-magnitude preprocessing, and RISC-V-defined corner-case handling;
+- a multi-cycle in-order RV32IM reference core with blocking instruction/data interfaces, architectural commit reporting, system instructions, synchronous traps, and halt-after-trap behavior;
+- directed normal-execution, trap, and misaligned-reset-PC core regressions.
 
 Run the current regression with:
 
@@ -166,8 +164,20 @@ Run the same checks for the iterative divider with:
 make CAD_ENV=/path/to/env.sh check-divider
 ```
 
+Run all reference-core simulations, lint, and synthesis sanity checks with:
+
+```bash
+make CAD_ENV=/path/to/env.sh check-reference-core
+```
+
 The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
 encodings, datapath responsibilities, module implementation steps, and required unit tests.
+The [reference-core development guide](docs/rv32-reference-core.md) explains the multi-cycle datapath,
+state machine, memory protocol, commit semantics, and integration sequence. The
+[reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current
+testbench structure, trap matrix, invariants, and regression commands.
+The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding,
+partial products, the Wallace carry-save tree, and pipeline placement.
 The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring
 algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
 
@@ -289,7 +299,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-项目目前处于早期实现阶段。以下模块已经实现，并具有 self-checking unit test：
+RV32IM 多周期 reference core 已经实现，并具有 self-checking core-level regression。五级流水线、cache 和乱序核仍属于后续计划。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -299,12 +309,11 @@ scripts/             构建、回归、综合和结果处理脚本
 - decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令、conditional
   branch、JAL、JALR、load 和 store，以及 LUI、AUIPC；同时能够识别 ECALL、
   EBREAK、FENCE 和 FENCE.TSO 事件；暂不支持 FENCE.I；
-- 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和
-  signed/unsigned load extension。
-- 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，
-  吞吐率为每周期一条请求。
-- 单请求 RV32M 除法器，使用 32 周期 Radix-2 restoring division，支持
-  signed-magnitude 预处理和 RISC-V 规定的除零、溢出行为。
+- 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和 signed/unsigned load extension；
+- 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，吞吐率为每周期一条请求；
+- 单请求 RV32M 除法器，使用 32 周期 Radix-2 restoring division，支持 signed-magnitude 预处理和 RISC-V 规定的除零、溢出行为；
+- 多周期顺序 RV32IM reference core，具有 blocking instruction/data interface、architectural commit、system instruction、同步 trap 和 trap 后 HALT；
+- 正常执行、trap 和 RESET_PC 不对齐三组 core-level directed regression。
 
 运行当前全部测试：
 
@@ -336,8 +345,17 @@ make CAD_ENV=/path/to/env.sh check-multiplier
 make CAD_ENV=/path/to/env.sh check-divider
 ```
 
+运行全部 reference-core 仿真、lint 和综合完整性检查：
+
+```bash
+make CAD_ENV=/path/to/env.sh check-reference-core
+```
+
 [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
 逐模块实现步骤和必须完成的单元测试。
+[Reference core 开发教程](docs/rv32-reference-core.md)说明了多周期数据通路、状态机、memory protocol、commit 语义和集成顺序。
+[Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
+[Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
 [Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、
 signed 转换、架构特殊情况和逐周期实现方法。
 

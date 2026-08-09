@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// RV32I instruction decoder.
+// RV32IM instruction decoder.
 //
 // Current support includes RV32I integer ALU, control-flow, and load/store
-// instructions; LUI and AUIPC; and decode events for ECALL, EBREAK, and FENCE.
+// instructions; RV32M multiply/divide operations; LUI and AUIPC; and decode
+// events for ECALL, EBREAK, and FENCE.
 // The decoder extracts register addresses and converts instruction encoding
 // fields into internal control signals. It does not read registers, calculate
 // results, update the PC, or write architectural state.
@@ -26,6 +27,7 @@ module rv32_decoder (
     output rv32_pkg::operand_a_sel_e    operand_a_sel_o,
     output rv32_pkg::operand_b_sel_e    operand_b_sel_o,
     output rv32_pkg::imm_kind_e         imm_kind_o,
+    output rv32_pkg::muldiv_op_e        muldiv_op_o,
 
     output rv32_pkg::branch_op_e        branch_op_o,
     output rv32_pkg::control_flow_e     control_flow_o,
@@ -61,6 +63,7 @@ module rv32_decoder (
     operand_b_sel_o = rv32_pkg::OP_B_RS2;
     imm_kind_o = rv32_pkg::IMM_NONE;
     branch_valid = 1'b0;
+    muldiv_op_o = rv32_pkg::MD_NONE;
 
     branch_op_o = rv32_pkg::BR_EQ;
     control_flow_o = rv32_pkg::CF_NONE;
@@ -78,113 +81,135 @@ module rv32_decoder (
 
     case(opcode)
       rv32_pkg::OPCODE_OP: begin
-        case(funct3)
-          3'b000: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_ADD;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
-            end else if(funct7 == 7'b0100000) begin
-              alu_op_o = rv32_pkg::ALU_SUB;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
-            end
+        if (funct7 == 7'b0000001) begin
+          case (funct3)
+            3'b000: muldiv_op_o = rv32_pkg::MD_MUL;
+            3'b001: muldiv_op_o = rv32_pkg::MD_MULH;
+            3'b010: muldiv_op_o = rv32_pkg::MD_MULHSU;
+            3'b011: muldiv_op_o = rv32_pkg::MD_MULHU;
+            3'b100: muldiv_op_o = rv32_pkg::MD_DIV;
+            3'b101: muldiv_op_o = rv32_pkg::MD_DIVU;
+            3'b110: muldiv_op_o = rv32_pkg::MD_REM;
+            3'b111: muldiv_op_o = rv32_pkg::MD_REMU;
+            default: muldiv_op_o = rv32_pkg::MD_NONE;
+          endcase
+          if (muldiv_op_o != rv32_pkg::MD_NONE) begin
+            operand_a_sel_o = rv32_pkg::OP_A_RS1;
+            operand_b_sel_o = rv32_pkg::OP_B_RS2;
+            reg_write_o = 1'b1;
+            rs1_used_o = 1'b1;
+            rs2_used_o = 1'b1;
+            illegal_o = 1'b0;
           end
-          3'b001: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_SLL;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+        end else begin
+          case(funct3)
+            3'b000: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_ADD;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end else if(funct7 == 7'b0100000) begin
+                alu_op_o = rv32_pkg::ALU_SUB;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b010: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_SLT;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b001: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_SLL;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b011: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_SLTU;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b010: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_SLT;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b100: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_XOR;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b011: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_SLTU;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b101: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_SRL;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b100: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_XOR;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-            if(funct7 == 7'b0100000) begin
-              alu_op_o = rv32_pkg::ALU_SRA;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b101: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_SRL;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
+              if(funct7 == 7'b0100000) begin
+                alu_op_o = rv32_pkg::ALU_SRA;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b110: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_OR;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b110: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_OR;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-          3'b111: begin
-            if(funct7 == 7'b0000000) begin
-              alu_op_o = rv32_pkg::ALU_AND;
-              operand_a_sel_o = rv32_pkg::OP_A_RS1;
-              operand_b_sel_o = rv32_pkg::OP_B_RS2;
-              reg_write_o = 1'b1;
-              rs1_used_o = 1'b1;
-              rs2_used_o = 1'b1;
-              illegal_o = 1'b0;
+            3'b111: begin
+              if(funct7 == 7'b0000000) begin
+                alu_op_o = rv32_pkg::ALU_AND;
+                operand_a_sel_o = rv32_pkg::OP_A_RS1;
+                operand_b_sel_o = rv32_pkg::OP_B_RS2;
+                reg_write_o = 1'b1;
+                rs1_used_o = 1'b1;
+                rs2_used_o = 1'b1;
+                illegal_o = 1'b0;
+              end
             end
-          end
-        endcase
+          endcase
+        end
       end
       rv32_pkg::OPCODE_OP_IMM: begin
         case(funct3)
