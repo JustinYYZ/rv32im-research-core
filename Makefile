@@ -43,6 +43,16 @@ BRANCH_UNIT_SRCS := \
 	rtl/backend/rv32_branch_unit.sv \
 	tb/unit/rv32_branch_unit_tb.sv
 
+HAZARD_UNIT_TEST := $(BUILD_DIR)/rv32_hazard_unit_tb
+HAZARD_UNIT_SRCS := \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	tb/unit/rv32_hazard_unit_tb.sv
+
+FORWARDING_UNIT_TEST := $(BUILD_DIR)/rv32_forwarding_unit_tb
+FORWARDING_UNIT_SRCS := \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	tb/unit/rv32_forwarding_unit_tb.sv
+
 LSU_TEST := $(BUILD_DIR)/rv32_lsu_tb
 LSU_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -91,15 +101,145 @@ REFERENCE_CORE_RESET_PC_SRCS := \
 	$(REFERENCE_CORE_RTL_SRCS) \
 	tb/core/rv32_reference_core_reset_pc_tb.sv
 
-.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu \
+PIPELINE_CORE_COMPILE := $(BUILD_DIR)/rv32_pipeline_core_tb
+PIPELINE_CORE_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_pipeline_core_tb.sv
+
+PIPELINE_HAZARD_COMPILE := $(BUILD_DIR)/rv32_pipeline_hazard_tb
+PIPELINE_HAZARD_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_pipeline_hazard_tb.sv
+
+PIPELINE_FORWARDING_COMPILE := $(BUILD_DIR)/rv32_pipeline_forwarding_tb
+PIPELINE_FORWARDING_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/core/rv32_pipeline_forwarding_tb.sv
+
+PIPELINE_CONTROL_FLOW_COMPILE := $(BUILD_DIR)/rv32_pipeline_control_flow_tb
+PIPELINE_CONTROL_FLOW_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/core/rv32_pipeline_control_flow_tb.sv
+
+PIPELINE_MEMORY_COMPILE := $(BUILD_DIR)/rv32_pipeline_memory_tb
+PIPELINE_MEMORY_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_pipeline_memory_tb.sv
+
+PIPELINE_MULDIV_COMPILE := $(BUILD_DIR)/rv32_pipeline_muldiv_tb
+PIPELINE_MULDIV_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/core/rv32_pipeline_muldiv_tb.sv
+
+PIPELINE_TRAP_COMPILE := $(BUILD_DIR)/rv32_pipeline_trap_tb
+PIPELINE_TRAP_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_regfile.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/core/rv32_pipeline_trap_tb.sv
+
+.PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
 
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
+.PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
 
 test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
-	test-reference-core test-reference-core-trap test-reference-core-reset-pc
+	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -153,6 +293,22 @@ $(BRANCH_UNIT_TEST): $(BRANCH_UNIT_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_branch_unit_tb -o $@ $(BRANCH_UNIT_SRCS)'
+
+test-hazard-unit: $(HAZARD_UNIT_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(HAZARD_UNIT_TEST): $(HAZARD_UNIT_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_hazard_unit_tb -o $@ $(HAZARD_UNIT_SRCS)'
+
+test-forwarding-unit: $(FORWARDING_UNIT_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(FORWARDING_UNIT_TEST): $(FORWARDING_UNIT_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_forwarding_unit_tb -o $@ $(FORWARDING_UNIT_SRCS)'
 
 test-lsu: $(LSU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -243,6 +399,78 @@ synth-reference-core:
 		$(YOSYS) -q -p "read_verilog -sv $(REFERENCE_CORE_RTL_SRCS); \
 		hierarchy -check -top rv32_reference_core; proc; opt; check"'
 
+compile-pipeline-core: $(PIPELINE_CORE_COMPILE)
+
+test-pipeline-core: $(PIPELINE_CORE_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_CORE_COMPILE): $(PIPELINE_CORE_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_core_tb -o $@ $(PIPELINE_CORE_SRCS)'
+
+compile-pipeline-hazard: $(PIPELINE_HAZARD_COMPILE)
+
+test-pipeline-hazard: $(PIPELINE_HAZARD_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_HAZARD_COMPILE): $(PIPELINE_HAZARD_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_hazard_tb -o $@ $(PIPELINE_HAZARD_SRCS)'
+
+compile-pipeline-forwarding: $(PIPELINE_FORWARDING_COMPILE)
+
+test-pipeline-forwarding: $(PIPELINE_FORWARDING_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_FORWARDING_COMPILE): $(PIPELINE_FORWARDING_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_forwarding_tb -o $@ $(PIPELINE_FORWARDING_SRCS)'
+
+compile-pipeline-control-flow: $(PIPELINE_CONTROL_FLOW_COMPILE)
+
+test-pipeline-control-flow: $(PIPELINE_CONTROL_FLOW_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_CONTROL_FLOW_COMPILE): $(PIPELINE_CONTROL_FLOW_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_control_flow_tb -o $@ $(PIPELINE_CONTROL_FLOW_SRCS)'
+
+compile-pipeline-memory: $(PIPELINE_MEMORY_COMPILE)
+
+test-pipeline-memory: $(PIPELINE_MEMORY_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_MEMORY_COMPILE): $(PIPELINE_MEMORY_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_memory_tb -o $@ $(PIPELINE_MEMORY_SRCS)'
+
+compile-pipeline-muldiv: $(PIPELINE_MULDIV_COMPILE)
+
+test-pipeline-muldiv: $(PIPELINE_MULDIV_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_MULDIV_COMPILE): $(PIPELINE_MULDIV_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_muldiv_tb -o $@ $(PIPELINE_MULDIV_SRCS)'
+
+compile-pipeline-trap: $(PIPELINE_TRAP_COMPILE)
+
+test-pipeline-trap: $(PIPELINE_TRAP_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(PIPELINE_TRAP_COMPILE): $(PIPELINE_TRAP_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_trap_tb -o $@ $(PIPELINE_TRAP_SRCS)'
+
+check-pipeline: test-hazard-unit test-forwarding-unit test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
@@ -252,4 +480,4 @@ tools:
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
-		$(BRANCH_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST)
+		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE)

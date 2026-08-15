@@ -42,30 +42,35 @@ treated as implemented behavior.
 
 ### Planned Architecture
 
-```text
-                                +-------------------+
-                                |    L1 I-cache     |
-                                +---------+---------+
-                                          |
-PC -> Fetch -> Decode -> Rename/Dispatch -+--------------------+
-                         |                                      |
-                         +-> RAT / Free List                    |
-                         +-> ROB --------------------------> Commit -> ARF
-                         +-> Reservation Stations               |
-                                          |                     |
-                                          v                     |
-                                  Execution Units -> Completion-+
-                                    |      |      |
-                                   ALU   MUL/DIV  LSU -> L1 D-cache
-                                                        |
-                                L1 I-cache --------------+-> L2 -> Memory
+```mermaid
+flowchart LR
+    PC --> FETCH[Fetch]
+    FETCH <--> L1I["L1 I-cache"]
+    L1I <--> L2["Unified L2 cache"]
+    L2 <--> MEM[Memory]
+    FETCH --> DECODE[Decode]
+    DECODE --> RENAME["Rename / Dispatch"]
+    RENAME --> RAT["RAT / Free List"]
+    RENAME --> ROB[ROB]
+    RENAME --> RS["Reservation Stations"]
+    RS --> ALU[ALU]
+    RS --> MULDIV["MUL / DIV"]
+    RS --> LSU[LSU]
+    LSU <--> L1D["L1 D-cache"]
+    L1D <--> L2
+    ALU --> COMPLETE[Completion]
+    MULDIV --> COMPLETE
+    LSU --> COMPLETE
+    COMPLETE --> ROB
+    ROB --> COMMIT[Commit]
+    COMMIT --> ARF["Architectural State"]
 ```
 
-Development uses three independently testable cores:
+The design is organized around three independently testable cores:
 
-1. `rv32_reference_core`: a multicycle in-order architectural reference;
-2. `rv32_pipeline_core`: a five-stage in-order performance baseline;
-3. `rv32_ooo_core`: a dynamically scheduled core with in-order retirement.
+1. `rv32_reference_core`: implemented multicycle in-order architectural reference;
+2. `rv32_pipeline_core`: implemented five-stage in-order performance baseline;
+3. `rv32_ooo_core`: planned dynamically scheduled core with in-order retirement.
 
 All cores are intended to share the same memory and architectural commit interfaces.
 
@@ -117,7 +122,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multi-cycle reference core is implemented and covered by self-checking core-level regressions. The five-stage pipeline, caches, and out-of-order core remain planned. Implemented components include:
+The RV32IM multicycle reference core and five-stage in-order pipeline are implemented and covered by self-checking regressions. Caches, differential verification, and the out-of-order core remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -132,7 +137,9 @@ The RV32IM multi-cycle reference core is implemented and covered by self-checkin
 - a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace carry-save tree, with one-request-per-cycle throughput;
 - a single-request RV32M divider using 32-cycle Radix-2 restoring division, signed-magnitude preprocessing, and RISC-V-defined corner-case handling;
 - a multi-cycle in-order RV32IM reference core with blocking instruction/data interfaces, architectural commit reporting, system instructions, synchronous traps, and halt-after-trap behavior;
-- directed normal-execution, trap, and misaligned-reset-PC core regressions.
+- a five-stage RV32IM pipeline with valid-bit stage control, optional RAW stalling, EX/MEM and MEM/WB forwarding, branch/JAL/JALR recovery, blocking load/store operation, and multicycle RV32M integration;
+- precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
+- directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
 
 Run the current regression with:
 
@@ -170,16 +177,18 @@ Run all reference-core simulations, lint, and synthesis sanity checks with:
 make CAD_ENV=/path/to/env.sh check-reference-core
 ```
 
-The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics,
-encodings, datapath responsibilities, module implementation steps, and required unit tests.
-The [reference-core development guide](docs/rv32-reference-core.md) explains the multi-cycle datapath,
-state machine, memory protocol, commit semantics, and integration sequence. The
-[reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current
-testbench structure, trap matrix, invariants, and regression commands.
-The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding,
-partial products, the Wallace carry-save tree, and pipeline placement.
-The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring
-algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
+Run all pipeline unit and core-level regressions with:
+
+```bash
+make CAD_ENV=/path/to/env.sh check-pipeline
+```
+
+- The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics, encodings, datapath responsibilities, module implementation steps, and required unit tests.
+- The [reference-core development guide](docs/rv32-reference-core.md) explains the multi-cycle datapath, state machine, memory protocol, commit semantics, and integration sequence.
+- The [reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current testbench structure, trap matrix, invariants, and regression commands.
+- The [five-stage pipeline guide](docs/rv32-pipeline-core.md) explains stage payloads, hazards, forwarding, blocking operations, precise traps, and pipeline regressions.
+- The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding, partial products, the Wallace carry-save tree, and pipeline placement.
+- The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
 
 ### License
 
@@ -225,30 +234,35 @@ RV32IM Research Core 是一个使用 SystemVerilog 开发的可综合 RISC-V 处
 
 ### 计划架构
 
-```text
-                                +-------------------+
-                                |    L1 I-cache     |
-                                +---------+---------+
-                                          |
-PC -> Fetch -> Decode -> Rename/Dispatch -+--------------------+
-                         |                                      |
-                         +-> RAT / Free List                    |
-                         +-> ROB --------------------------> Commit -> ARF
-                         +-> Reservation Stations               |
-                                          |                     |
-                                          v                     |
-                                  Execution Units -> Completion-+
-                                    |      |      |
-                                   ALU   MUL/DIV  LSU -> L1 D-cache
-                                                        |
-                                L1 I-cache --------------+-> L2 -> Memory
+```mermaid
+flowchart LR
+    PC --> FETCH[Fetch]
+    FETCH <--> L1I["L1 I-cache"]
+    L1I <--> L2["Unified L2 cache"]
+    L2 <--> MEM[Memory]
+    FETCH --> DECODE[Decode]
+    DECODE --> RENAME["Rename / Dispatch"]
+    RENAME --> RAT["RAT / Free List"]
+    RENAME --> ROB[ROB]
+    RENAME --> RS["Reservation Stations"]
+    RS --> ALU[ALU]
+    RS --> MULDIV["MUL / DIV"]
+    RS --> LSU[LSU]
+    LSU <--> L1D["L1 D-cache"]
+    L1D <--> L2
+    ALU --> COMPLETE[Completion]
+    MULDIV --> COMPLETE
+    LSU --> COMPLETE
+    COMPLETE --> ROB
+    ROB --> COMMIT[Commit]
+    COMMIT --> ARF["Architectural State"]
 ```
 
-项目包含三种可以独立测试的处理器实现：
+项目按三种可以独立测试的处理器实现组织：
 
-1. `rv32_reference_core`：多周期顺序 architectural reference；
-2. `rv32_pipeline_core`：五级顺序流水线性能 baseline；
-3. `rv32_ooo_core`：动态调度、顺序退休的乱序执行核。
+1. `rv32_reference_core`：已实现的多周期顺序 architectural reference；
+2. `rv32_pipeline_core`：已实现的五级顺序流水线性能 baseline；
+3. `rv32_ooo_core`：计划实现的动态调度、顺序退休乱序核。
 
 三种实现计划共用相同的 memory interface 和 architectural commit interface。
 
@@ -299,7 +313,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core 已经实现，并具有 self-checking core-level regression。五级流水线、cache 和乱序核仍属于后续计划。当前已实现内容包括：
+RV32IM 多周期 reference core 和五级顺序流水线已经实现，并具有 self-checking regression。Cache、差分验证和乱序核仍属于后续计划。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -313,7 +327,9 @@ RV32IM 多周期 reference core 已经实现，并具有 self-checking core-leve
 - 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，吞吐率为每周期一条请求；
 - 单请求 RV32M 除法器，使用 32 周期 Radix-2 restoring division，支持 signed-magnitude 预处理和 RISC-V 规定的除零、溢出行为；
 - 多周期顺序 RV32IM reference core，具有 blocking instruction/data interface、architectural commit、system instruction、同步 trap 和 trap 后 HALT；
-- 正常执行、trap 和 RESET_PC 不对齐三组 core-level directed regression。
+- 五级 RV32IM 顺序流水线，具有 valid-bit stage control、可选 RAW stall、EX/MEM 与 MEM/WB forwarding、branch/JAL/JALR recovery、blocking load/store 和多周期 RV32M 集成；
+- 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
+- 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
 
 运行当前全部测试：
 
@@ -351,13 +367,18 @@ make CAD_ENV=/path/to/env.sh check-divider
 make CAD_ENV=/path/to/env.sh check-reference-core
 ```
 
-[RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、
-逐模块实现步骤和必须完成的单元测试。
-[Reference core 开发教程](docs/rv32-reference-core.md)说明了多周期数据通路、状态机、memory protocol、commit 语义和集成顺序。
-[Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
-[Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
-[Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、
-signed 转换、架构特殊情况和逐周期实现方法。
+运行全部 pipeline unit 和 core-level regression：
+
+```bash
+make CAD_ENV=/path/to/env.sh check-pipeline
+```
+
+- [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、逐模块实现步骤和必须完成的单元测试。
+- [Reference core 开发教程](docs/rv32-reference-core.md)说明了多周期数据通路、状态机、memory protocol、commit 语义和集成顺序。
+- [Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
+- [五级流水线指南](docs/rv32-pipeline-core.md)说明了 stage payload、hazard、forwarding、blocking operation、精确异常和 pipeline regression。
+- [Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
+- [Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、signed 转换、架构特殊情况和逐周期实现方法。
 
 ### 开源许可证
 

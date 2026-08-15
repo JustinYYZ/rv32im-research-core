@@ -2,7 +2,7 @@
 
 本文档说明如何把已经完成的 decoder、immediate generator、regfile、ALU、branch unit、LSU、multiplier 和 divider 组合成第一颗能够运行程序的 RV32IM CPU。它描述目标接口、逐周期状态变化、每类指令的数据通路、commit 语义、测试方法和推荐实现顺序。
 
-Reference core 的重点是架构正确性，不是性能。它一次只处理一条指令，因此暂时没有 pipeline hazard、forwarding、branch prediction、register renaming、ROB 或乱序调度。后续 pipeline core 和 OoO core 可以使用它的 commit 输出作为差分验证基准。
+Reference core 的重点是架构正确性，不是性能。它一次只处理一条指令，因此没有 pipeline hazard、forwarding、branch prediction、register renaming、ROB 或乱序调度。Pipeline core 使用相同 commit 输出，未来的 OoO core 也将复用该接口进行差分验证。
 
 ## 1. 这一阶段最终要得到什么
 
@@ -930,7 +930,7 @@ Regfile 会忽略 x0 写入，但 commit interface 也应报告 `commit_rd_write
 
 ## 14. 与后续模块的关系
 
-Reference core 完成后，下一步是五级 pipeline core，而不是立刻修改 reference core 追求频率。Pipeline core 使用相同 memory 和 commit 语义，但允许多条指令同时在途。
+本项目在 reference core 之后实现五级 pipeline core，而不是修改 reference core 追求频率。Pipeline core 使用相同 memory 和 commit 语义，但允许多条指令同时在途。
 
 L1 cache 可以接在 instruction/data ports 外部：
 

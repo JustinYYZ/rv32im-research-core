@@ -13,7 +13,7 @@
 - RISC-V 官方 architectural test suite 或 Spike differential checking；
 - 随机 memory backpressure 和覆盖率收敛。
 
-这些未包含项不会影响当前 reference core 作为后续 pipeline/OoO 实现的顺序架构基准，但如果要对外声称更完整的 ISA compliance，应继续补充程序级和差分验证。
+这些未包含项不会影响 reference core 作为 pipeline/OoO 实现的顺序架构基准，但如果要对外声称更完整的 ISA compliance，应继续补充程序级和差分验证。
 
 ## 2. Testbench 分工
 
@@ -165,7 +165,7 @@ Reference core 的下一层验证可以按以下顺序增加：
 1. 用 RISC-V GNU toolchain 将 assembly 链接到固定地址，并转换为 memory image；
 2. 增加包含 loop、memory copy、RV32M corner case 和 trap termination 的程序级 smoke tests；
 3. 让 memory model 随机延迟 ready/response，检查 backpressure 下 commit trace 不变；
-4. 用相同程序比较 reference core 与后续 pipeline core 的 commit trace；
+4. 用相同程序比较 reference core 与 pipeline core 的 commit trace；
 5. 接入 Spike 或兼容 RVFI 的 differential checker；
 6. 运行适合当前 RV32IM/bare-metal 范围的 architectural tests，并记录明确的 pass/fail 配置。
 

@@ -246,7 +246,7 @@ function automatic logic signed [PRODUCT_WIDTH-1:0] booth_multiple(
   input logic [2:0] code,
   input logic signed [PRODUCT_WIDTH-1:0] multiplicand
 );
-  // TODO: 根据 Booth table 返回 0、A、2A、-A 或 -2A。
+  // 根据 Booth table 选择并返回 0、A、2A、-A 或 -2A。
 endfunction
 ```
 
