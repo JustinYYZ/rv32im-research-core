@@ -13,7 +13,7 @@
 - RISC-V 官方 architectural test suite 或 Spike differential checking；
 - 随机 memory backpressure 和覆盖率收敛。
 
-这些未包含项不会影响 reference core 作为 pipeline/OoO 实现的顺序架构基准，但如果要对外声称更完整的 ISA compliance，应继续补充程序级和差分验证。
+这些未包含项不会影响 reference core 作为 pipeline/OoO 实现的顺序架构基准。当前已有 reference-vs-pipeline directed commit differential test；如果要对外声称更完整的 ISA compliance，仍应补充更长程序、随机场景和外部模型差分验证。
 
 ## 2. Testbench 分工
 
@@ -23,6 +23,7 @@
 | `tb/core/rv32_reference_core_tb.sv` | 执行正常 RV32IM directed program，检查 commit 序列、register result 和 memory side effect |
 | `tb/core/rv32_reference_core_trap_tb.sv` | 每个 case reset 并装载短程序，验证 instruction/data/system trap 与 HALT |
 | `tb/core/rv32_reference_core_reset_pc_tb.sv` | 用 `RESET_PC=0x0000_0002` 验证取指前的 instruction-address-misaligned trap |
+| `tb/core/rv32_core_differential_tb.sv` | 用独立 memory 运行相同程序，按退休顺序比较 reference 与 pipeline commit event |
 
 正常执行和 trap 分开测试，是因为 trap commit 后 core 会进入持久 HALT。独立 case 可以明确区分“程序正常退休到某处”和“异常恰好发生在期望 instruction”。
 
@@ -165,7 +166,7 @@ Reference core 的下一层验证可以按以下顺序增加：
 1. 用 RISC-V GNU toolchain 将 assembly 链接到固定地址，并转换为 memory image；
 2. 增加包含 loop、memory copy、RV32M corner case 和 trap termination 的程序级 smoke tests；
 3. 让 memory model 随机延迟 ready/response，检查 backpressure 下 commit trace 不变；
-4. 用相同程序比较 reference core 与 pipeline core 的 commit trace；
+4. 将当前 reference-vs-pipeline 差分测试扩展到多个程序和不同 memory latency；
 5. 接入 Spike 或兼容 RVFI 的 differential checker；
 6. 运行适合当前 RV32IM/bare-metal 范围的 architectural tests，并记录明确的 pass/fail 配置。
 

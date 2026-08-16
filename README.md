@@ -64,7 +64,15 @@ flowchart LR
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
     COMMIT --> ARF["Architectural State"]
+    classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
+    classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    class PC,FETCH,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
+    class L1I,L1D,L2,RENAME,RAT,ROB,RS,COMPLETE planned
+    class MEM external
 ```
+
+Green nodes identify capabilities already implemented in the reference or pipeline core. Gray nodes are planned cache or OoO structures, while blue identifies the external memory environment. Green does not imply that the block has already been integrated into the future OoO core.
 
 The design is organized around three independently testable cores:
 
@@ -122,7 +130,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core and five-stage in-order pipeline are implemented and covered by self-checking regressions. Caches, differential verification, and the out-of-order core remain planned. Implemented components include:
+The RV32IM multicycle reference core and five-stage in-order pipeline are implemented and covered by self-checking regressions. Caches, external-model differential verification, and the out-of-order core remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -139,6 +147,7 @@ The RV32IM multicycle reference core and five-stage in-order pipeline are implem
 - a multi-cycle in-order RV32IM reference core with blocking instruction/data interfaces, architectural commit reporting, system instructions, synchronous traps, and halt-after-trap behavior;
 - a five-stage RV32IM pipeline with valid-bit stage control, optional RAW stalling, EX/MEM and MEM/WB forwarding, branch/JAL/JALR recovery, blocking load/store operation, and multicycle RV32M integration;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
+- commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
 
 Run the current regression with:
@@ -183,10 +192,17 @@ Run all pipeline unit and core-level regressions with:
 make CAD_ENV=/path/to/env.sh check-pipeline
 ```
 
+Run the reference-versus-pipeline commit differential test with:
+
+```bash
+make CAD_ENV=/path/to/env.sh test-core-differential
+```
+
 - The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics, encodings, datapath responsibilities, module implementation steps, and required unit tests.
 - The [reference-core development guide](docs/rv32-reference-core.md) explains the multi-cycle datapath, state machine, memory protocol, commit semantics, and integration sequence.
 - The [reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current testbench structure, trap matrix, invariants, and regression commands.
 - The [five-stage pipeline guide](docs/rv32-pipeline-core.md) explains stage payloads, hazards, forwarding, blocking operations, precise traps, and pipeline regressions.
+- The [core differential verification guide](docs/rv32-core-differential-verification.md) explains reference-model confidence, commit-event comparison, independent memories, scoreboard design, and extension strategy.
 - The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding, partial products, the Wallace carry-save tree, and pipeline placement.
 - The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
 
@@ -256,7 +272,15 @@ flowchart LR
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
     COMMIT --> ARF["Architectural State"]
+    classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
+    classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    class PC,FETCH,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
+    class L1I,L1D,L2,RENAME,RAT,ROB,RS,COMPLETE planned
+    class MEM external
 ```
+
+绿色节点表示已经在 reference core 或 pipeline core 中实现的能力；灰色节点表示计划中的 cache 或 OoO 结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经完成未来 OoO core 中的集成。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -313,7 +337,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core 和五级顺序流水线已经实现，并具有 self-checking regression。Cache、差分验证和乱序核仍属于后续计划。当前已实现内容包括：
+RV32IM 多周期 reference core 和五级顺序流水线已经实现，并具有 self-checking regression。Cache、外部模型差分验证和乱序核仍属于后续计划。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -329,6 +353,7 @@ RV32IM 多周期 reference core 和五级顺序流水线已经实现，并具有
 - 多周期顺序 RV32IM reference core，具有 blocking instruction/data interface、architectural commit、system instruction、同步 trap 和 trap 后 HALT；
 - 五级 RV32IM 顺序流水线，具有 valid-bit stage control、可选 RAW stall、EX/MEM 与 MEM/WB forwarding、branch/JAL/JALR recovery、blocking load/store 和多周期 RV32M 集成；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
+- Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
 
 运行当前全部测试：
@@ -373,10 +398,17 @@ make CAD_ENV=/path/to/env.sh check-reference-core
 make CAD_ENV=/path/to/env.sh check-pipeline
 ```
 
+运行 reference core 与 pipeline core 的 commit 差分测试：
+
+```bash
+make CAD_ENV=/path/to/env.sh test-core-differential
+```
+
 - [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、逐模块实现步骤和必须完成的单元测试。
 - [Reference core 开发教程](docs/rv32-reference-core.md)说明了多周期数据通路、状态机、memory protocol、commit 语义和集成顺序。
 - [Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
 - [五级流水线指南](docs/rv32-pipeline-core.md)说明了 stage payload、hazard、forwarding、blocking operation、精确异常和 pipeline regression。
+- [Core 差分验证教程](docs/rv32-core-differential-verification.md)说明了 reference model 的可信度、commit event 比较、独立 memory、scoreboard 设计和扩展方法。
 - [Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
 - [Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、signed 转换、架构特殊情况和逐周期实现方法。
 

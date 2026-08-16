@@ -230,6 +230,16 @@ PIPELINE_TRAP_SRCS := \
 	rtl/core/rv32_pipeline_core.sv \
 	tb/core/rv32_pipeline_trap_tb.sv
 
+CORE_DIFFERENTIAL_COMPILE := $(BUILD_DIR)/rv32_core_differential_tb
+CORE_DIFFERENTIAL_SRCS := \
+	$(REFERENCE_CORE_RTL_SRCS) \
+	rtl/pkg/rv32_pipeline_pkg.sv \
+	rtl/pipeline/rv32_hazard_unit.sv \
+	rtl/pipeline/rv32_forwarding_unit.sv \
+	rtl/core/rv32_pipeline_core.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_core_differential_tb.sv
+
 .PHONY: test test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
@@ -237,9 +247,10 @@ PIPELINE_TRAP_SRCS := \
 
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
 .PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
+.PHONY: compile-core-differential test-core-differential
 
 test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
-	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline
+	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -471,6 +482,16 @@ $(PIPELINE_TRAP_COMPILE): $(PIPELINE_TRAP_SRCS)
 
 check-pipeline: test-hazard-unit test-forwarding-unit test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap
 
+compile-core-differential: $(CORE_DIFFERENTIAL_COMPILE)
+
+test-core-differential: $(CORE_DIFFERENTIAL_COMPILE)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(CORE_DIFFERENTIAL_COMPILE): $(CORE_DIFFERENTIAL_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_core_differential_tb -o $@ $(CORE_DIFFERENTIAL_SRCS)'
+
 tools:
 	bash -c '$(ENV_SETUP) \
 		printf "iverilog: " && command -v $(IVERILOG) && \
@@ -480,4 +501,4 @@ tools:
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
-		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE)
+		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE)

@@ -339,12 +339,13 @@ make CAD_ENV=/path/to/env.sh check-pipeline
 
 ## 13. 后续工作边界
 
-当前 core 是经过 directed regression 的五级顺序 baseline，但这不等于已经完成 ISA compliance 或性能研究。进入 cache/OoO 之前仍应增加：
+当前 core 是经过 directed regression 和基础 reference-vs-pipeline commit differential test 的五级顺序 baseline，但这不等于已经完成 ISA compliance 或性能研究。进入 cache/OoO 之后仍应逐步增加：
 
-- reference core 与 pipeline core 的 commit-level differential checking；
+- 覆盖更多程序和不同 memory latency 的 commit-level differential checking；
 - assembler/ELF-to-memory-image 流程；
 - 更长的 bare-metal program tests；
 - 随机 instruction 和随机 memory latency regression；
+- Spike、Sail 或兼容 RVFI 的外部模型 differential checking；
 - Verilator lint、Yosys synthesis 和 OpenROAD timing baseline。
 
 这些验证应复用现有 commit interface，而不改变已经验证的 pipeline stage semantics。
