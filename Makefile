@@ -246,8 +246,8 @@ ICACHE_SRCS := \
 	rtl/cache/rv32_icache.sv \
 	tb/cache/rv32_icache_tb.sv
 
-PIPELINE_ICACHE_COMPILE := $(BUILD_DIR)/rv32_pipeline_icache_tb
-PIPELINE_ICACHE_SRCS := \
+PIPELINE_L1_COMPILE := $(BUILD_DIR)/rv32_pipeline_l1_tb
+PIPELINE_L1_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
 	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_pipeline_pkg.sv \
@@ -263,10 +263,11 @@ PIPELINE_ICACHE_SRCS := \
 	rtl/pipeline/rv32_hazard_unit.sv \
 	rtl/pipeline/rv32_forwarding_unit.sv \
 	rtl/cache/rv32_icache.sv \
+	rtl/cache/rv32_dcache.sv \
 	rtl/core/rv32_pipeline_core.sv \
-	rtl/core/rv32_pipeline_icache_top.sv \
+	rtl/core/rv32_pipeline_l1_top.sv \
 	tb/model/rv32_simple_memory.sv \
-	tb/cache/rv32_pipeline_icache_tb.sv
+	tb/cache/rv32_pipeline_l1_tb.sv
 
 DCACHE_COMPILE := $(BUILD_DIR)/rv32_dcache_tb
 DCACHE_SRCS := \
@@ -282,11 +283,11 @@ DCACHE_SRCS := \
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
 .PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
 .PHONY: compile-core-differential test-core-differential
-.PHONY: compile-icache test-icache compile-pipeline-icache test-pipeline-icache
+.PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
 
 test: test-alu test-regfile test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
-	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-icache test-dcache
+	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
@@ -538,15 +539,15 @@ $(ICACHE_COMPILE): $(ICACHE_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_icache_tb -o $@ $(ICACHE_SRCS)'
 
-compile-pipeline-icache: $(PIPELINE_ICACHE_COMPILE)
+compile-pipeline-l1: $(PIPELINE_L1_COMPILE)
 
-test-pipeline-icache: $(PIPELINE_ICACHE_COMPILE)
+test-pipeline-l1: $(PIPELINE_L1_COMPILE)
 	bash -c '$(ENV_SETUP) $(VVP) $<'
 
-$(PIPELINE_ICACHE_COMPILE): $(PIPELINE_ICACHE_SRCS)
+$(PIPELINE_L1_COMPILE): $(PIPELINE_L1_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
-		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_icache_tb -o $@ $(PIPELINE_ICACHE_SRCS)'
+		$(IVERILOG) -g2012 -Wall -s rv32_pipeline_l1_tb -o $@ $(PIPELINE_L1_SRCS)'
 
 compile-dcache: $(DCACHE_COMPILE)
 
@@ -567,4 +568,4 @@ tools:
 
 clean:
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
-		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_ICACHE_COMPILE) $(DCACHE_COMPILE)
+		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)

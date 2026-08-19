@@ -1,6 +1,6 @@
 # RV32 L1 Cache 开发教程
 
-本文档以 direct-mapped blocking I-cache 为主线，说明 L1 cache 的通用 geometry、refill 和 pipeline integration。Write-back D-cache 的 masked store、write-allocate、dirty eviction 和错误顺序见 [RV32 L1 D-cache 开发教程](rv32-dcache-development.md)。2-way associativity、64-byte line 和 unified L2 属于后续结构扩展。
+本文档是一份完整的 L1 cache 开发教程，依次说明公共 geometry、blocking I-cache、write-back D-cache，以及把两者接入五级流水线的方法。第一版采用 direct-mapped、32-byte line 和 blocking miss；2-way associativity、64-byte line 和 unified L2 属于后续结构扩展。
 
 ## 1. 开发目标和边界
 
@@ -252,7 +252,7 @@ Reset 必须让所有 valid bit 变为0。Data 和 tag 不需要全部清零，�
 
 ## 9. C5：Pipeline Integration 和 Differential Checking
 
-集成顶层 `rtl/core/rv32_pipeline_icache_top.sv` 将 pipeline instruction port 接到 I-cache CPU side，并将 I-cache memory side 暴露为 backing instruction-memory port。Data-memory 和 architectural commit ports 直接穿过 wrapper。
+I-cache integration 最初验证了 pipeline instruction port、I-cache CPU side 和 backing instruction-memory port 的连接。这一连接保留在后续的 `rtl/core/rv32_pipeline_l1_top.sv` 中；加入 D-cache 前，data-memory port 暂时直接穿过 wrapper。
 
 集成验证包括：
 
@@ -281,58 +281,349 @@ stall_cycle_count
 access_count = hit_count + miss_count
 ```
 
-## 10. 从独立 Cache 到完整 L1
+## 10. D-cache 为什么比 I-cache 复杂
 
-完整 L1 hierarchy 的扩展顺序为：
+I-cache 只接收 read request。命中时返回 instruction，未命中时读取完整 line。D-cache 还要处理 store，因此同一条 line 除了 `valid`、`tag` 和 `data`，还需要 `dirty` 状态。
 
-1. 分别验证 direct-mapped blocking I-cache 和 D-cache；
-2. 将两个 L1 cache 接入 pipeline 的 instruction/data ports；
-3. 增加 cache flush/invalidate；
-4. 比较32-byte和64-byte line；
-5. 增加2-way set associativity和 replacement state；
-6. 设计 I/D cache 到 unified L2 的仲裁与 line-level protocol。
+| 情况 | I-cache | D-cache |
+|---|---|---|
+| Hit | 返回 instruction | Load 返回 word；store 修改被 mask 选中的 byte |
+| Miss | Refill 新 line | 可能先 write back dirty victim，再 refill |
+| Lower write | 无 | Dirty eviction 写回完整 line |
+| Store miss | 无 | Write-allocate：先 refill，再 merge store |
+| Error | Refill access fault | Writeback 和 refill error 都要保持旧 line 可恢复 |
 
-D-cache 比 I-cache 多出的主要逻辑不是地址分解，而是 store merge、dirty state、victim writeback 和异常/flush 顺序。
+第一版仍然是 blocking cache：一次只保存一个 CPU request，下级最多有一个 transaction 在途。因此不需要 MSHR、load/store queue 或多个 miss 合并。
 
-## 11. 构建与完成标准
+## 11. D-cache 与 LSU 的职责边界
 
-只编译 I-cache testbench：
+`rtl/backend/rv32_lsu.sv` 负责解释 RISC-V load/store 指令：检查 alignment，把 byte address 对齐到32-bit word，生成 store byte mask，并对 load 结果做 byte/halfword 选择和符号扩展。D-cache 不重复解释 LB、LH、LW、SB、SH、SW；它只处理 LSU 已经格式化好的32-bit transaction。
+
+例如 `SB x5, 1(x6)` 的有效地址是 `0x00001041`，并且 `x5[7:0] = 0xaa`，LSU 应向 D-cache 提供：
+
+```text
+addr  = 0x00001040
+wdata = 0x0000aa00
+wstrb = 0010
+write = 1
+```
+
+D-cache 只看到 `wstrb[1]` 为1，因此用 `wdata[15:8]` 替换 cached word 的第二个 byte。它不需要知道原指令是 SB。
+
+D-cache CPU side 与 pipeline data-memory port 对应：
+
+| Signal | 含义 |
+|---|---|
+| `cpu_req_valid_i` / `cpu_req_ready_o` | CPU request handshake |
+| `cpu_req_addr_i` | 对齐后的32-bit byte address |
+| `cpu_req_write_i` | 0 为 load，1 为 store |
+| `cpu_req_wdata_i` | 已移动到目标 byte lane 的 store data |
+| `cpu_req_wstrb_i` | 四个 byte lane 的写使能 |
+| `cpu_resp_valid_o` | 当前 request 完成 |
+| `cpu_resp_rdata_o` | Load 返回的完整32-bit word |
+| `cpu_resp_error_o` | 下级访问失败 |
+
+Lower-memory side 仍然一次传输一个32-bit word：
+
+```text
+Refill read   : mem_req_write_o=0, mem_req_wstrb_o=0000
+Victim write : mem_req_write_o=1, mem_req_wstrb_o=1111
+```
+
+每个 accepted lower request 都必须等到一次 `mem_resp_valid_i`，才能开始下一个 word。
+
+## 12. D1/D2：地址、数组和 Hit Path
+
+D-cache 与 I-cache 使用相同的 parameter geometry 和地址分解方法。不要复制一套写死的 bit number；`cpu_req_offset`、`cpu_req_index`、`cpu_req_word_index`、`cpu_req_tag` 和 `cpu_req_line_base` 的关系与第4节完全相同。
+
+Direct-mapped D-cache 需要四组 array：
+
+```text
+valid_array[SET_COUNT]
+dirty_array[SET_COUNT]
+tag_array[SET_COUNT][TAG_BITS]
+data_array[SET_COUNT][LINE_BITS]
+```
+
+Request handshake 后必须保存 `addr`、`write`、`wdata` 和 `wstrb`。CPU 在 request 被接受后可以改变输入，所以 LOOKUP 及后续状态只能使用保存的 request。
+
+Load hit 的关系是：
+
+```text
+hit = valid_array[index] && tag_array[index] == request_tag
+response word = data_array[index][word_index * 32 +: 32]
+```
+
+Store hit 不能直接用 `wdata` 覆盖整个 word。需要逐 byte merge：
+
+```text
+new_word = old_word
+for lane = 0..3:
+    if saved_wstrb[lane] == 1:
+        new_word[lane*8 +: 8] = saved_wdata[lane*8 +: 8]
+```
+
+然后把 `new_word` 放回 line 中原 word 的位置并设置 `dirty_array[index] = 1`。Store hit 不访问 lower memory，但仍必须返回一次 successful CPU response，否则 pipeline 会永久等待。
+
+## 13. D3：Clean Miss、Refill 和 Write-allocate
+
+发生 miss 后先检查当前 set 中的 victim：
+
+| Victim 状态 | 下一步 |
+|---|---|
+| Invalid | 直接 refill |
+| Valid、clean、tag 不同 | 直接 refill |
+| Valid、dirty、tag 不同 | 先 writeback，再 refill |
+
+Clean load miss 的执行顺序：
+
+```text
+保存 CPU load request
+        ↓
+LOOKUP 发现 miss，victim 不需要 writeback
+        ↓
+依次读取 line base + 0、4、...、28
+        ↓
+在 refill buffer 中收齐8个 word
+        ↓
+一次性安装 data、tag、valid，并令 dirty=0
+        ↓
+返回 request word
+```
+
+不要在每个 refill response 到达时直接公开半条新 line。先写 `refill_buffer_q`，最后再原子安装，error 时就能保留旧 array entry。
+
+Store miss 采用 write-allocate：先 refill 完整 line，再把保存的 store mask/data merge 到目标 word，安装时将 dirty 设为1。不能只把 store 的一个 word 放入空 line，因为同一 line 的另外七个 word 仍属于 lower memory，以后也可能被 load。
+
+## 14. D4：Dirty Victim Writeback
+
+Tag mismatch 时同时存在新 request 和旧 victim。必须保存旧 line 的 tag 与 data，例如：
+
+```text
+victim_tag_q
+victim_line_q
+```
+
+Victim line base 由旧 tag 和发生冲突的 set index 重建：
+
+```text
+victim_line_base = {victim_tag_q, request_index, OFFSET_BITS 个 0}
+```
+
+不能使用新 request 的 line base，否则会把旧数据写入新地址，形成难以察觉的 memory corruption。
+
+完整状态流建议为：
+
+```text
+IDLE
+  ↓ 保存 CPU request
+LOOKUP
+  ├─ hit → RESPONSE
+  ├─ clean miss → REFILL_REQUEST
+  └─ dirty miss → WRITEBACK_REQUEST
+                         ↓ request accepted
+                    WRITEBACK_WAIT
+                         ↓ response
+                    下一 word 或 REFILL_REQUEST
+REFILL_REQUEST
+  ↓ request accepted
+REFILL_WAIT
+  ↓ response
+下一 word 或 REFILL_INSTALL
+  ↓
+RESPONSE
+```
+
+每个 victim word 都使用 full-word write：
+
+```text
+addr  = victim_line_base + transfer_count * 4
+wdata = victim_line_q[transfer_count * 32 +: 32]
+wstrb = 1111
+write = 1
+```
+
+即使最初只执行了 SB，cache line 中也保存了 merge 后的完整 word，所以 eviction 可以按完整 word 写回。
+
+Backpressure 的规则是：当 `mem_req_valid_o=1 && mem_req_ready_i=0` 时，address、write、wdata、wstrb 和 transfer counter 必须保持不变。只有 request handshake 后才能进入 WAIT，只有 response 后才能处理下一个 word。
+
+Error policy：
+
+- Writeback error：停止当前 miss，不启动 refill，保留旧 valid/dirty line，并向 CPU 返回 error；
+- Refill error：不安装部分 line，保留原 array entry，并向 CPU 返回 error；
+- 全部 refill 成功：最后一次性替换旧 entry。
+
+实现控制器时通常需要以下跨周期寄存器：
+
+```text
+state_q
+request_addr_q
+request_write_q
+request_wdata_q
+request_wstrb_q
+response_rdata_q
+response_error_q
+transfer_count_q
+refill_buffer_q
+victim_tag_q
+victim_line_q
+```
+
+可以从 `request_addr_q` 重新计算的 index、tag、word index 和 line base 不必重复保存。
+
+## 15. Standalone D-cache 验证
+
+`tb/cache/rv32_dcache_tb.sv` 按以下功能组验证 D-cache：
+
+1. Parameter geometry 和地址分解；
+2. Hit lookup、byte merge 和 dirty 状态；
+3. CPU request/response 与 hit 不访问下级 memory；
+4. Clean load miss、clean replacement 和 store write-allocate；
+5. Dirty victim 的8次 writeback 与随后8次 refill；
+6. Lower request backpressure 下的信号稳定性；
+7. Writeback/refill error 后的 array 状态与恢复能力。
+
+Testbench 统计 accepted transaction：
+
+```text
+accepted = mem_req_valid_o && mem_req_ready_i
+```
+
+不能用 `mem_req_valid_o` 为高的周期数代替 transaction 数，因为 backpressure 可能让同一 request 保持多个周期。部分后续 task 会使用前一 task 建立的 dirty line；若改变调用顺序，应先确认该 task 是否依赖已有 cache state。
+
+Standalone D-cache 的完成标准：
+
+- Cold load/store miss 各产生恰好8个 refill read；
+- Store miss 先 refill，再 merge，并置 dirty；
+- SB、SH、SW 只修改 mask 选择的 byte；
+- Dirty conflict 先8次 writeback，再8次 refill；
+- Victim address 使用旧 tag 重建；
+- Backpressure 下没有重复 transaction；
+- Writeback/refill error 不会安装部分 line 或丢失旧 dirty line；
+- Reset 后旧 line 不再命中。
+
+## 16. D5：将两个 L1 接入同一个 Pipeline Wrapper
+
+不需要复制一个新的 CPU core。`rv32_pipeline_core.sv` 保持为纯 pipeline，实现外部 instruction/data memory protocol；原 I-cache integration wrapper 演进并重命名为 `rtl/core/rv32_pipeline_l1_top.sv`，在同一层连接两个 cache：
+
+```mermaid
+flowchart LR
+    CORE[rv32_pipeline_core]
+    IC[rv32_icache]
+    DC[rv32_dcache]
+    IMEM[External instruction backing memory]
+    DMEM[External data backing memory]
+    CORE -- core_imem --> IC
+    IC -- imem --> IMEM
+    CORE -- core_dmem --> DC
+    DC -- dmem --> DMEM
+```
+
+这个 wrapper 不是另一个 CPU：它没有 decoder、register file 或 pipeline state，只负责层次连接和 cache parameter。保留 wrapper 可以让 `rv32_pipeline_core` 单独测试，也能在未来替换 cache 层次而不修改 core 内部逻辑。
+
+在 unified L2 出现前，I-cache 和 D-cache 使用两组独立 backing ports，因此此阶段不需要仲裁器。
+
+### D5A：声明 core-to-D-cache wires
+
+文件：`rtl/core/rv32_pipeline_l1_top.sv`，位置：现有 `core_imem_*` 声明之后。
+
+声明下面九个信号，宽度与 wrapper 的 external dmem ports 一致：
+
+```text
+core_dmem_req_valid
+core_dmem_req_ready
+core_dmem_req_addr[31:0]
+core_dmem_req_write
+core_dmem_req_wdata[31:0]
+core_dmem_req_wstrb[3:0]
+core_dmem_resp_valid
+core_dmem_resp_rdata[31:0]
+core_dmem_resp_error
+```
+
+这些信号只是 pipeline core 和 D-cache CPU side 之间的内部连线，不是 backing-memory request。
+
+### D5B：修改 pipeline core 的 data-port 连接
+
+文件：`rtl/core/rv32_pipeline_l1_top.sv`，位置：`rv32_pipeline_core core (...)` 实例。
+
+保持 instruction port、commit port 和所有 parameter 不变，只把九个 `.dmem_*` 端口从 wrapper external dmem 信号换成对应的 `core_dmem_*`。完成后，pipeline 不再直接访问 backing data memory。
+
+### D5C：实例化 D-cache
+
+文件：`rtl/core/rv32_pipeline_l1_top.sv`，位置：`rv32_icache` 实例之后。
+
+实例化 `rv32_dcache`：
+
+- `ADDR_WIDTH` 使用32；
+- `CACHE_BYTES` 使用 `DCACHE_BYTES`；
+- `LINE_BYTES` 使用 `DCACHE_LINE_BYTES`；
+- CPU side 连接九个 `core_dmem_*`；
+- Memory side 连接 wrapper 的 external `dmem_*`。
+
+完成 D5C 后，external dmem port 的含义从“pipeline 的单个 load/store transaction”变为“D-cache 发出的 refill read 或 victim writeback transaction”。
+
+### D5T1：Load miss 和 hit
+
+文件：`tb/cache/rv32_pipeline_l1_tb.sv`，task：`test_dcache_load_miss_and_hit`。
+
+加载一段包含两次同 line load 的程序。第一次 load 应提交正确 rd value，并使 `backing_dmem_read_count` 增加8；第二次 load 应从 cache hit，提交值相同，但 read count 不再增加。检查的是 backing port 的 handshake 数，不是等待周期数。
+
+### D5T2：Store merge 与 commit
+
+文件：`tb/cache/rv32_pipeline_l1_tb.sv`，task：`test_dcache_store_merge`。
+
+分别执行 SB、SH 和 SW，并检查退休时的 `commit_mem_addr`、`commit_mem_wmask` 与 `commit_mem_wdata`。每个 store 后执行 load，验证 pipeline 从 D-cache 观察到 merge 后的值。
+
+Write-back cache 的 store hit 只更新 cache array，不会立即更新 `memory_model`。因此此测试不能在 store commit 后直接读取 backing memory 来判断 store 是否正确。
+
+### D5T3：Dirty eviction
+
+文件：`tb/cache/rv32_pipeline_l1_tb.sv`，task：`test_dcache_dirty_eviction`。
+
+先 store 使一条 line dirty，再访问 tag 不同但 index 相同的地址。期望顺序是8次 backing write，然后8次 backing read。只有 writeback 完成后，才能检查 `memory_model` 中的旧 line 已包含修改后的 byte。
+
+### D5T4：Data access fault
+
+文件：`tb/cache/rv32_pipeline_l1_tb.sv`，task：`test_dcache_access_errors`。
+
+分别注入 refill read error 和 dirty writeback error。Pipeline 必须只为原始 memory instruction 产生一次 precise access-fault commit；writeback 失败时不能继续发 refill request。Pipeline 在 trap 后进入 sticky halt，因此 cache 的错误恢复和旧 dirty victim 保留行为由 standalone D-cache regression 单独检查。
+
+完成每个 task 后再把它加入 testbench 的 `initial` 调用序列。不要一次启用四个空 task，否则失败时难以判断是哪条路径出错。
+
+## 17. Reset、存储实现与 PPA
+
+Reset 只需要清除 valid bit；D-cache 建议同时清除 dirty bit。Tag/data 不需要 reset，因为 valid=0 时它们不能形成 hit。不要给32 KiB data array 添加同步或异步 reset，否则通常会破坏 SRAM inference，并生成巨大的 reset mux/flip-flop 网络。
+
+固定上界的 `for` loop、常量乘4或 variable part-select 不等于 RTL 中一定存在通用乘法器。综合器通常会展开循环并把乘2的幂转成移位/接线。真正需要关注的 PPA 路径是 tag compare、line word selection、store byte merge、状态控制和 data array 的实现方式。
+
+当前 SystemVerilog array 适合功能仿真。进行有意义的 OpenROAD cache PPA 前，应把 data array 映射到目标工艺的 SRAM macro；若32 KiB 全部展开成 flip-flop，面积、功耗和频率不代表工业 cache。
+
+## 18. 构建命令与完整 L1 完成标准
+
+Standalone cache：
 
 ```bash
 make CAD_ENV=/path/to/env.sh compile-icache
-```
-
-运行 I-cache 单元测试：
-
-```bash
 make CAD_ENV=/path/to/env.sh test-icache
-```
-
-只编译或运行 pipeline + I-cache 集成测试：
-
-```bash
-make CAD_ENV=/path/to/env.sh compile-pipeline-icache
-make CAD_ENV=/path/to/env.sh test-pipeline-icache
-```
-
-只编译或运行 standalone D-cache regression：
-
-```bash
 make CAD_ENV=/path/to/env.sh compile-dcache
 make CAD_ENV=/path/to/env.sh test-dcache
 ```
 
-`test-icache`、`test-pipeline-icache` 和 `test-dcache` 都纳入总 `make test` 回归。
+Pipeline + separate L1 wrapper：
 
-第一版 direct-mapped I-cache 完成标准：
+```bash
+make CAD_ENV=/path/to/env.sh compile-pipeline-l1
+make CAD_ENV=/path/to/env.sh test-pipeline-l1
+```
 
-- parameter geometry 计算正确；
-- address split 测试通过；
-- cold miss 产生恰好 `WORDS_PER_LINE` 个下级请求；
-- refill 后同 line 访问命中且不访问下级 memory；
-- 相同 Index、不同 Tag 正确替换；
-- backpressure 下 request 稳定且不重复；
-- refill error 不产生 valid line；
-- reset 后旧 line 不再命中；
-- pipeline 集成测试保持正确 commit 顺序，并验证跨 line redirect；
-- 原有 pipeline regression 和 reference-vs-pipeline differential test 继续通过。
+`test-pipeline-l1` 按顺序运行 I-cache same-line/redirect 场景和 D-cache load、store merge、dirty eviction、access-error 场景。完整 L1 baseline 满足：
+
+- I-cache cold miss、same-line hit、conflict replacement、redirect 和 error 测试通过；
+- D-cache load/store hit、write-allocate、dirty eviction、backpressure 和 error 测试通过；
+- Pipeline 的 instruction/data ports 都只连接各自 L1 的 CPU side；
+- Architectural commit 内容和顺序不因 cache latency 改变；
+- 原 pipeline regression 与 core differential regression 继续通过；
+- `make test` 全部通过。
+
+后续扩展顺序为 cache flush/invalidate、32/64-byte line 对比、2-way associativity，然后再设计 I/D cache 到 unified L2 的仲裁与 line-level protocol。

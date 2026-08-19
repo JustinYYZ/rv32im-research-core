@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Pipeline-core integration top with a blocking direct-mapped L1 I-cache.
-// The external instruction port is the I-cache backing-memory interface; the
-// data-memory and architectural commit ports pass through the pipeline core.
+// Pipeline integration wrapper for separate blocking L1 instruction and data
+// caches. The external memory ports carry cache refill and writeback traffic;
+// architectural load/store requests remain between the core and D-cache.
 
 `timescale 1ns/1ps
 
-module rv32_pipeline_icache_top #(
+module rv32_pipeline_l1_top #(
     parameter logic [31:0] RESET_PC = 32'h0000_0000,
     parameter logic ENABLE_FORWARDING = 1'b1,
     parameter int unsigned ICACHE_BYTES = rv32_cache_pkg::L1_DEFAULT_CACHE_BYTES,
-    parameter int unsigned ICACHE_LINE_BYTES = rv32_cache_pkg::L1_DEFAULT_LINE_BYTES
+    parameter int unsigned ICACHE_LINE_BYTES = rv32_cache_pkg::L1_DEFAULT_LINE_BYTES,
+    parameter int unsigned DCACHE_BYTES = rv32_cache_pkg::L1_DEFAULT_CACHE_BYTES,
+    parameter int unsigned DCACHE_LINE_BYTES = rv32_cache_pkg::L1_DEFAULT_LINE_BYTES
 ) (
     input  logic                            clk_i,
     input  logic                            rst_i,
@@ -59,7 +61,20 @@ module rv32_pipeline_icache_top #(
   logic [31:0] core_imem_resp_data;
   logic core_imem_resp_error;
 
-  // The core instruction port terminates at the CPU-facing side of the I-cache.
+  // Pipeline data-side wires connect the core to the CPU-facing side of the
+  // D-cache. They are distinct from the wrapper's backing-memory data port.
+  logic core_dmem_req_valid;
+  logic core_dmem_req_ready;
+  logic [31:0] core_dmem_req_addr;
+  logic core_dmem_req_write;
+  logic [31:0] core_dmem_req_wdata;
+  logic [3:0] core_dmem_req_wstrb;
+  logic core_dmem_resp_valid;
+  logic [31:0] core_dmem_resp_rdata;
+  logic core_dmem_resp_error;
+
+  // The pipeline core remains cache-agnostic and uses its blocking instruction
+  // and data protocols on the CPU-facing side of the two L1 caches.
   rv32_pipeline_core #(
     .RESET_PC(RESET_PC),
     .ENABLE_FORWARDING(ENABLE_FORWARDING)
@@ -72,15 +87,15 @@ module rv32_pipeline_icache_top #(
     .imem_resp_valid_i (core_imem_resp_valid),
     .imem_resp_data_i (core_imem_resp_data),
     .imem_resp_error_i (core_imem_resp_error),
-    .dmem_req_valid_o (dmem_req_valid_o),
-    .dmem_req_ready_i (dmem_req_ready_i),
-    .dmem_req_addr_o (dmem_req_addr_o),
-    .dmem_req_write_o (dmem_req_write_o),
-    .dmem_req_wdata_o (dmem_req_wdata_o),
-    .dmem_req_wstrb_o (dmem_req_wstrb_o),
-    .dmem_resp_valid_i (dmem_resp_valid_i),
-    .dmem_resp_rdata_i (dmem_resp_rdata_i),
-    .dmem_resp_error_i (dmem_resp_error_i),
+    .dmem_req_valid_o (core_dmem_req_valid),
+    .dmem_req_ready_i (core_dmem_req_ready),
+    .dmem_req_addr_o (core_dmem_req_addr),
+    .dmem_req_write_o (core_dmem_req_write),
+    .dmem_req_wdata_o (core_dmem_req_wdata),
+    .dmem_req_wstrb_o (core_dmem_req_wstrb),
+    .dmem_resp_valid_i (core_dmem_resp_valid),
+    .dmem_resp_rdata_i (core_dmem_resp_rdata),
+    .dmem_resp_error_i (core_dmem_resp_error),
     .commit_valid_o (commit_valid_o),
     .commit_pc_o (commit_pc_o),
     .commit_instr_o (commit_instr_o),
@@ -99,7 +114,7 @@ module rv32_pipeline_icache_top #(
     .halted_o (halted_o)
   );
 
-  // The cache memory side is the wrapper's external instruction-memory port.
+  // The I-cache memory side is the wrapper's external instruction backing port.
   rv32_icache #(
     .ADDR_WIDTH(32),
     .CACHE_BYTES(ICACHE_BYTES),
@@ -119,6 +134,35 @@ module rv32_pipeline_icache_top #(
     .mem_resp_valid_i (imem_resp_valid_i),
     .mem_resp_data_i (imem_resp_data_i),
     .mem_resp_error_i (imem_resp_error_i)
+  );
+
+  // The D-cache memory side emits full-word refill reads and dirty-victim
+  // writebacks through the wrapper's external data backing port.
+  rv32_dcache #(
+    .ADDR_WIDTH(32),
+    .CACHE_BYTES(DCACHE_BYTES),
+    .LINE_BYTES(DCACHE_LINE_BYTES)
+  ) dcache (
+    .clk_i (clk_i),
+    .rst_i (rst_i),
+    .cpu_req_valid_i (core_dmem_req_valid),
+    .cpu_req_ready_o (core_dmem_req_ready),
+    .cpu_req_addr_i (core_dmem_req_addr),
+    .cpu_req_write_i (core_dmem_req_write),
+    .cpu_req_wdata_i (core_dmem_req_wdata),
+    .cpu_req_wstrb_i (core_dmem_req_wstrb),
+    .cpu_resp_valid_o (core_dmem_resp_valid),
+    .cpu_resp_rdata_o (core_dmem_resp_rdata),
+    .cpu_resp_error_o (core_dmem_resp_error),
+    .mem_req_valid_o (dmem_req_valid_o),
+    .mem_req_ready_i (dmem_req_ready_i),
+    .mem_req_addr_o (dmem_req_addr_o),
+    .mem_req_write_o (dmem_req_write_o),
+    .mem_req_wdata_o (dmem_req_wdata_o),
+    .mem_req_wstrb_o (dmem_req_wstrb_o),
+    .mem_resp_valid_i (dmem_resp_valid_i),
+    .mem_resp_rdata_i (dmem_resp_rdata_i),
+    .mem_resp_error_i (dmem_resp_error_i)
   );
 
 endmodule

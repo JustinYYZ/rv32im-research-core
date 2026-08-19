@@ -41,6 +41,9 @@ module rv32_simple_memory #(
   logic dmem_write_q;
   logic [31:0] dmem_wdata_q;
   logic [3:0] dmem_wstrb_q;
+  logic dmem_error_enable;
+  logic dmem_error_write;
+  logic [31:0] dmem_error_addr;
 
   // Core-level tests use these helpers to construct directed programs and
   // inspect final memory state without a separate software image loader.
@@ -71,6 +74,27 @@ module rv32_simple_memory #(
     end
   endfunction
 
+  // Directed cache tests can arm one exact data-port transaction to fail. The
+  // match includes address and read/write type and is consumed by the response.
+  task automatic set_dmem_error(
+    input logic [31:0] byte_addr,
+    input logic write
+  );
+    begin
+      dmem_error_enable = 1'b1;
+      dmem_error_write = write;
+      dmem_error_addr = byte_addr;
+    end
+  endtask
+
+  task automatic clear_dmem_error;
+    begin
+      dmem_error_enable = 1'b0;
+      dmem_error_write = 1'b0;
+      dmem_error_addr = 32'd0;
+    end
+  endtask
+
   // Each port accepts at most one request, returns a one-cycle response, and
   // reports misaligned or out-of-range accesses without indexing outside the
   // array. Data writes update only the byte lanes selected by dmem_req_wstrb_i.
@@ -92,6 +116,9 @@ module rv32_simple_memory #(
       dmem_write_q <= 1'b0;
       dmem_wdata_q <= 32'd0;
       dmem_wstrb_q <= 4'd0;
+      dmem_error_enable <= 1'b0;
+      dmem_error_write <= 1'b0;
+      dmem_error_addr <= 32'd0;
     end else begin
       if (imem_pending_q) begin
         imem_resp_valid_o <= 1'b1;
@@ -110,9 +137,12 @@ module rv32_simple_memory #(
       if (dmem_pending_q) begin
         dmem_resp_valid_o <= 1'b1;
         dmem_pending_q <= 1'b0;
-        if (dmem_addr_q[1:0] != 2'b00 || (dmem_addr_q >> 2) >= WORDS) begin
+        if (dmem_addr_q[1:0] != 2'b00 ||
+            (dmem_addr_q >> 2) >= WORDS ||
+            (dmem_error_enable && dmem_write_q == dmem_error_write && dmem_addr_q == dmem_error_addr)) begin
           dmem_resp_rdata_o <= 32'd0;
           dmem_resp_error_o <= 1'b1;
+          dmem_error_enable <= 1'b0;
         end else begin
           dmem_resp_error_o <= 1'b0;
           if (dmem_write_q) begin

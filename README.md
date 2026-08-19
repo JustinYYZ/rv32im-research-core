@@ -72,7 +72,7 @@ flowchart LR
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including the pipeline-integrated L1 I-cache and standalone L1 D-cache. Gray nodes are planned cache or OoO structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Gray nodes are planned cache or OoO structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -130,7 +130,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Pipeline integration of the L1 data cache, the unified L2 cache, external-model differential verification, and the out-of-order core remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The unified L2 cache, external-model differential verification, and out-of-order core remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -147,7 +147,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a multi-cycle in-order RV32IM reference core with blocking instruction/data interfaces, architectural commit reporting, system instructions, synchronous traps, and halt-after-trap behavior;
 - a five-stage RV32IM pipeline with valid-bit stage control, optional RAW stalling, EX/MEM and MEM/WB forwarding, branch/JAL/JALR recovery, blocking load/store operation, and multicycle RV32M integration;
 - a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
-- a pipeline-plus-I-cache integration top with regressions covering same-line hits, cross-line refill, JAL redirect recovery, conflict replacement, failed refill behavior, and backing-memory request counts;
+- a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
@@ -201,11 +201,11 @@ Run the reference-versus-pipeline commit differential test with:
 make CAD_ENV=/path/to/env.sh test-core-differential
 ```
 
-Run the standalone and pipeline-integrated L1 I-cache regressions with:
+Run the standalone I-cache regression and the pipeline L1-wrapper regression with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-icache
-make CAD_ENV=/path/to/env.sh test-pipeline-icache
+make CAD_ENV=/path/to/env.sh test-pipeline-l1
 ```
 
 Run the standalone L1 D-cache regression with:
@@ -219,8 +219,7 @@ make CAD_ENV=/path/to/env.sh test-dcache
 - The [reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current testbench structure, trap matrix, invariants, and regression commands.
 - The [five-stage pipeline guide](docs/rv32-pipeline-core.md) explains stage payloads, hazards, forwarding, blocking operations, precise traps, and pipeline regressions.
 - The [core differential verification guide](docs/rv32-core-differential-verification.md) explains reference-model confidence, commit-event comparison, independent memories, scoreboard design, and extension strategy.
-- The [L1 cache development guide](docs/rv32-cache-development.md) explains cache geometry, address decomposition, hit lookup, blocking refill, error handling, and the path from direct-mapped I-cache to a complete L1 hierarchy.
-- The [L1 D-cache development guide](docs/rv32-dcache-development.md) explains masked store hits, write-allocate, dirty-victim writeback, error ordering, and pipeline integration.
+- The [L1 cache development guide](docs/rv32-cache-development.md) is the unified tutorial for shared geometry, I-cache refill, D-cache masked stores and writeback, error handling, and dual-L1 pipeline integration.
 - The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding, partial products, the Wallace carry-save tree, and pipeline placement.
 - The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
 
@@ -298,7 +297,7 @@ flowchart LR
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括与 pipeline 集成的 L1 I-cache 和独立验证的 L1 D-cache；灰色节点表示计划中的 cache 或 OoO 结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；灰色节点表示计划中的 cache 或 OoO 结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -355,7 +354,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。L1 data cache 的 pipeline 集成、unified L2 cache、外部模型差分验证和乱序核仍属于后续计划。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline；unified L2 cache、外部模型差分验证和乱序核仍属于后续计划。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -371,7 +370,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 多周期顺序 RV32IM reference core，具有 blocking instruction/data interface、architectural commit、system instruction、同步 trap 和 trap 后 HALT；
 - 五级 RV32IM 顺序流水线，具有 valid-bit stage control、可选 RAW stall、EX/MEM 与 MEM/WB forwarding、branch/JAL/JALR recovery、blocking load/store 和多周期 RV32M 集成；
 - 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
-- pipeline + I-cache 集成顶层及自检 regression，覆盖 same-line hit、cross-line refill、JAL redirect recovery、conflict replacement、refill failure 和 backing-memory request count；
+- pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
@@ -425,11 +424,11 @@ make CAD_ENV=/path/to/env.sh check-pipeline
 make CAD_ENV=/path/to/env.sh test-core-differential
 ```
 
-运行独立 I-cache 和 pipeline + I-cache 集成测试：
+运行独立 I-cache 和 pipeline L1 wrapper 集成测试：
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-icache
-make CAD_ENV=/path/to/env.sh test-pipeline-icache
+make CAD_ENV=/path/to/env.sh test-pipeline-l1
 ```
 
 运行独立 L1 D-cache regression：
@@ -443,8 +442,7 @@ make CAD_ENV=/path/to/env.sh test-dcache
 - [Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
 - [五级流水线指南](docs/rv32-pipeline-core.md)说明了 stage payload、hazard、forwarding、blocking operation、精确异常和 pipeline regression。
 - [Core 差分验证教程](docs/rv32-core-differential-verification.md)说明了 reference model 的可信度、commit event 比较、独立 memory、scoreboard 设计和扩展方法。
-- [L1 Cache 开发教程](docs/rv32-cache-development.md)说明了 cache geometry、地址分解、hit lookup、blocking refill、错误处理以及从 direct-mapped I-cache 到完整 L1 hierarchy 的开发路径。
-- [L1 D-cache 开发教程](docs/rv32-dcache-development.md)说明了 masked store hit、write-allocate、dirty victim writeback、错误顺序和 pipeline 集成。
+- [L1 Cache 开发教程](docs/rv32-cache-development.md)统一说明了公共 geometry、I-cache refill、D-cache masked store 和 writeback、错误处理以及双 L1 pipeline 集成。
 - [Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
 - [Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、signed 转换、架构特殊情况和逐周期实现方法。
 
