@@ -21,4 +21,15 @@ package rv32_cache_pkg;
     ICACHE_STATE_RESPONSE
   } icache_state_e;
 
+  typedef enum logic [2:0] {
+    DCACHE_STATE_IDLE,
+    DCACHE_STATE_LOOKUP,
+    DCACHE_STATE_WRITEBACK_REQUEST,
+    DCACHE_STATE_WRITEBACK_WAIT,
+    DCACHE_STATE_REFILL_REQUEST,
+    DCACHE_STATE_REFILL_WAIT,
+    DCACHE_STATE_REFILL_INSTALL,
+    DCACHE_STATE_RESPONSE
+  } dcache_state_e;
+
 endpackage

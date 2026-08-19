@@ -1,6 +1,6 @@
 # RV32 L1 Cache 开发教程
 
-本文档指导如何在现有 blocking instruction/data interface 与 backing memory 之间实现 L1 I-cache 和 L1 D-cache。第一阶段只开发 direct-mapped blocking I-cache；D-cache、2-way associativity、64-byte line 和 unified L2 在 I-cache 正确后逐步增加。
+本文档以 direct-mapped blocking I-cache 为主线，说明 L1 cache 的通用 geometry、refill 和 pipeline integration。Write-back D-cache 的 masked store、write-allocate、dirty eviction 和错误顺序见 [RV32 L1 D-cache 开发教程](rv32-dcache-development.md)。2-way associativity、64-byte line 和 unified L2 属于后续结构扩展。
 
 ## 1. 开发目标和边界
 
@@ -14,7 +14,7 @@
 | 写策略 | 只读 | Write-back、write-allocate |
 | 第一版 miss handling | Blocking | Blocking |
 
-第一版 I-cache 使用32 KiB、32-byte line 和 direct-mapped。它是后续 PPA、miss rate 和 associativity 实验的基线，不是临时代码。容量与 line size 从开始就通过 parameter 表达。
+Direct-mapped baseline 的 I-cache 和 D-cache 都使用32 KiB 容量和32-byte line。它们是后续 PPA、miss rate 和 associativity 实验的基线，不是临时代码；容量与 line size 均通过 parameter 表达。
 
 当前第一版暂不包含：
 
@@ -281,18 +281,16 @@ stall_cycle_count
 access_count = hit_count + miss_count
 ```
 
-## 10. 从 I-cache 到完整 L1
+## 10. 从独立 Cache 到完整 L1
 
-完成 direct-mapped I-cache 后：
+完整 L1 hierarchy 的扩展顺序为：
 
-1. 比较32-byte和64-byte line；
-2. 增加2-way set associativity和每组1-bit replacement state；
-3. 实现 D-cache load hit；
-4. 实现 store byte mask；
-5. 增加 dirty bit、write-back和write-allocate；
-6. 实现 dirty victim eviction；
-7. 增加 cache flush/invalidate；
-8. 再设计 I/D cache 到 unified L2 的仲裁。
+1. 分别验证 direct-mapped blocking I-cache 和 D-cache；
+2. 将两个 L1 cache 接入 pipeline 的 instruction/data ports；
+3. 增加 cache flush/invalidate；
+4. 比较32-byte和64-byte line；
+5. 增加2-way set associativity和 replacement state；
+6. 设计 I/D cache 到 unified L2 的仲裁与 line-level protocol。
 
 D-cache 比 I-cache 多出的主要逻辑不是地址分解，而是 store merge、dirty state、victim writeback 和异常/flush 顺序。
 
@@ -317,7 +315,14 @@ make CAD_ENV=/path/to/env.sh compile-pipeline-icache
 make CAD_ENV=/path/to/env.sh test-pipeline-icache
 ```
 
-`test-icache` 和 `test-pipeline-icache` 都纳入总 `make test` 回归。
+只编译或运行 standalone D-cache regression：
+
+```bash
+make CAD_ENV=/path/to/env.sh compile-dcache
+make CAD_ENV=/path/to/env.sh test-dcache
+```
+
+`test-icache`、`test-pipeline-icache` 和 `test-dcache` 都纳入总 `make test` 回归。
 
 第一版 direct-mapped I-cache 完成标准：
 
