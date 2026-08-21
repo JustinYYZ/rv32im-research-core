@@ -1,6 +1,6 @@
 # RV32IM Reference Core 验证指南
 
-本文档说明当前 reference core 如何验证，重点是 testbench 分工、commit 不变量、trap case、memory request/response 检查和回归命令。数据通路和逐阶段实现方法见 [RV32IM 多周期 Reference Core 开发教程](rv32-reference-core.md)。
+本文档说明当前 reference core 如何验证，重点是 testbench 分工、commit 不变量、trap case、memory request/response 检查和回归命令。
 
 ## 1. 验证对象与边界
 

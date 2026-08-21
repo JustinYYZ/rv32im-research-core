@@ -123,7 +123,7 @@ rtl/                 synthesizable processor RTL
 
 tb/                  unit, core, and model testbenches
 sw/                  bare-metal tests and benchmarks
-docs/                design, verification, development, and result documents
+docs/                indexed design, verification, and result documents
 scripts/             build, regression, synthesis, and result-processing scripts
 .github/workflows/    continuous-integration jobs
 ```
@@ -214,14 +214,7 @@ Run the standalone L1 D-cache regression with:
 make CAD_ENV=/path/to/env.sh test-dcache
 ```
 
-- The [RV32IM RTL development guide](docs/rv32im-decode-table.md) explains instruction semantics, encodings, datapath responsibilities, module implementation steps, and required unit tests.
-- The [reference-core development guide](docs/rv32-reference-core.md) explains the multi-cycle datapath, state machine, memory protocol, commit semantics, and integration sequence.
-- The [reference-core verification guide](docs/rv32-reference-core-verification.md) documents the current testbench structure, trap matrix, invariants, and regression commands.
-- The [five-stage pipeline guide](docs/rv32-pipeline-core.md) explains stage payloads, hazards, forwarding, blocking operations, precise traps, and pipeline regressions.
-- The [core differential verification guide](docs/rv32-core-differential-verification.md) explains reference-model confidence, commit-event comparison, independent memories, scoreboard design, and extension strategy.
-- The [L1 cache development guide](docs/rv32-cache-development.md) is the unified tutorial for shared geometry, I-cache refill, D-cache masked stores and writeback, error handling, and dual-L1 pipeline integration.
-- The [Radix-4 Booth multiplier guide](docs/radix4-booth-multiplier.md) explains Booth recoding, partial products, the Wallace carry-save tree, and pipeline placement.
-- The [Radix-2 iterative divider guide](docs/radix2-iterative-divider.md) derives the restoring algorithm, signed conversion, architectural corner cases, and cycle-by-cycle implementation.
+- The [documentation index](docs/README.md) groups public design notes, verification references, and reproducible results.
 
 ### License
 
@@ -347,7 +340,7 @@ rtl/                 可综合处理器 RTL
 
 tb/                  unit、core 和 model testbench
 sw/                  bare-metal 测试与 benchmark
-docs/                设计、验证、开发记录和实验结果
+docs/                带索引的设计、验证和实验结果文档
 scripts/             构建、回归、综合和结果处理脚本
 .github/workflows/    自动测试
 ```
@@ -437,14 +430,7 @@ make CAD_ENV=/path/to/env.sh test-pipeline-l1
 make CAD_ENV=/path/to/env.sh test-dcache
 ```
 
-- [RV32IM RTL 开发教程](docs/rv32im-decode-table.md)说明了指令语义、编码、数据通路职责、逐模块实现步骤和必须完成的单元测试。
-- [Reference core 开发教程](docs/rv32-reference-core.md)说明了多周期数据通路、状态机、memory protocol、commit 语义和集成顺序。
-- [Reference core 验证指南](docs/rv32-reference-core-verification.md)说明了当前 testbench 结构、trap 测试矩阵、永久检查和回归命令。
-- [五级流水线指南](docs/rv32-pipeline-core.md)说明了 stage payload、hazard、forwarding、blocking operation、精确异常和 pipeline regression。
-- [Core 差分验证教程](docs/rv32-core-differential-verification.md)说明了 reference model 的可信度、commit event 比较、独立 memory、scoreboard 设计和扩展方法。
-- [L1 Cache 开发教程](docs/rv32-cache-development.md)统一说明了公共 geometry、I-cache refill、D-cache masked store 和 writeback、错误处理以及双 L1 pipeline 集成。
-- [Radix-4 Booth 乘法器教程](docs/radix4-booth-multiplier.md)说明了 Booth recoding、partial product、Wallace carry-save tree 和流水级划分。
-- [Radix-2 迭代除法器教程](docs/radix2-iterative-divider.md)说明了 restoring algorithm、signed 转换、架构特殊情况和逐周期实现方法。
+- [文档索引](docs/README.md)按照公开设计说明、验证资料和可复现实验结果组织项目文档。
 
 ### 开源许可证
 

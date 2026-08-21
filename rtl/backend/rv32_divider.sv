@@ -35,6 +35,7 @@ module rv32_divider (
   typedef enum logic [1:0] {
     DIV_STATE_IDLE,
     DIV_STATE_RUN,
+    DIV_STATE_FINALIZE,
     DIV_STATE_RESPOND
   } divider_state_e;
 
@@ -152,15 +153,18 @@ module rv32_divider (
           // The cycle with iteration_q==31 still performs the 32nd update.
           // Select from the combinational next values to avoid losing it.
           if (iteration_q == 6'd31) begin
-            if (return_remainder_q) begin
-              result_q <= remainder_negative_q ? (~remainder_next_comb[31:0] + 32'd1) : remainder_next_comb[31:0];
-            end else begin
-              result_q <= quotient_negative_q ? (~quotient_next_comb + 32'd1) : quotient_next_comb;
-            end
-            state_q <= DIV_STATE_RESPOND;
+            state_q <= DIV_STATE_FINALIZE;
           end else begin
             iteration_q <= iteration_q + 6'd1;
           end
+        end
+        DIV_STATE_FINALIZE: begin
+          if (return_remainder_q) begin
+            result_q <= remainder_negative_q ? (~remainder_q[31:0] + 32'd1) : remainder_q[31:0];
+          end else begin
+            result_q <= quotient_negative_q ? (~quotient_q + 32'd1) : quotient_q;
+          end
+          state_q <= DIV_STATE_RESPOND;
         end
         DIV_STATE_RESPOND: begin
           state_q <= DIV_STATE_IDLE;

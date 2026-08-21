@@ -39,6 +39,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Local personal planning (not published to GitHub)
+# Local planning and learning material (not published to GitHub)
 /PLAN.md
-
+/docs/tutorials/

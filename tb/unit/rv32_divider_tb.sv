@@ -96,7 +96,7 @@ module rv32_divider_tb;
     input logic [31:0] expected_result
   );
     begin
-      for (int cycle = 1; cycle <= 31; cycle++) begin
+      for (int cycle = 1; cycle <= 32; cycle++) begin
         @(posedge clk);
         #1;
         if (resp_valid !== 1'b0) begin
@@ -111,11 +111,11 @@ module rv32_divider_tb;
       @(posedge clk);
       #1;
       if (resp_valid !== 1'b1) begin
-        $error("%s failed: resp_valid should be 1 on cycle 32", test_name);
+        $error("%s failed: resp_valid should be 1 on cycle 33", test_name);
         errors++;
       end
       if (req_ready !== 1'b0) begin
-        $error("%s failed: req_ready should be 0 on cycle 32", test_name);
+        $error("%s failed: req_ready should be 0 on cycle 33", test_name);
         errors++;
       end
       if (result !== expected_result) begin
@@ -125,11 +125,11 @@ module rv32_divider_tb;
       @(posedge clk);
       #1;
       if (resp_valid !== 1'b0) begin
-        $error("%s failed: resp_valid should be 0 on cycle 33", test_name);
+        $error("%s failed: resp_valid should be 0 on cycle 34", test_name);
         errors++;
       end
       if (req_ready !== 1'b1) begin
-        $error("%s failed: req_ready should be 1 on cycle 33", test_name);
+        $error("%s failed: req_ready should be 1 on cycle 34", test_name);
         errors++;
       end
     end
