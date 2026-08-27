@@ -65,14 +65,16 @@ flowchart LR
     ROB --> COMMIT[Commit]
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class L2,RENAME,RAT,ROB,RS,COMPLETE planned
+    class ROB partial
+    class L2,RENAME,RAT,RS,COMPLETE planned
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Gray nodes are planned cache or OoO structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies the implemented ROB allocation and occupancy foundation whose entry storage and retirement behavior remain planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -130,7 +132,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The unified L2 cache, external-model differential verification, and out-of-order core remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The first out-of-order backend milestone adds a tested 16-entry ROB allocation-order and occupancy tracker; stored entry data, completion, retirement, and the integrated out-of-order core remain planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -149,6 +151,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
 - a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
+- a 16-entry circular ROB allocation-order tracker with generation-tagged pointers, explicit occupancy, full-request rejection, ordered pop behavior, and simultaneous allocation/pop handling;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
@@ -283,14 +286,16 @@ flowchart LR
     ROB --> COMMIT[Commit]
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class L2,RENAME,RAT,ROB,RS,COMPLETE planned
+    class ROB partial
+    class L2,RENAME,RAT,RS,COMPLETE planned
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；灰色节点表示计划中的 cache 或 OoO 结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经实现的 ROB allocation/occupancy 基础，其 entry storage 和 retirement 行为仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -347,7 +352,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline；unified L2 cache、外部模型差分验证和乱序核仍属于后续计划。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端的第一个 milestone 已实现并验证一个 16-entry ROB allocation-order/occupancy tracker；entry storage、completion、retirement 和完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -365,6 +370,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
 - pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
+- 16-entry circular ROB allocation-order tracker，使用带 generation 的指针和显式 occupancy，覆盖 full request rejection、顺序 pop 以及同周期 allocation/pop 行为；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
