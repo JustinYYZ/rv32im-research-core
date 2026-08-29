@@ -16,6 +16,9 @@ module rv32_rob_tb;
   logic                       alloc_valid;
   logic                       alloc_ready;
   rob_tag_t                   alloc_tag;
+  logic                       complete_valid;
+  rob_tag_t                   complete_tag;
+  logic [31:0]                complete_result;
   logic                       head_pop;
   logic                       head_valid;
   rob_tag_t                   head_tag;
@@ -27,19 +30,26 @@ module rv32_rob_tb;
 
   rob_tag_t accepted_tag;
   rob_tag_t popped_tag;
+  rob_alloc_payload_t alloc_payload;
+  rob_entry_t head_entry;
 
   rv32_rob dut (
-    .clk_i         (clk),
-    .rst_i         (rst),
-    .alloc_valid_i (alloc_valid),
-    .alloc_ready_o (alloc_ready),
-    .alloc_tag_o   (alloc_tag),
-    .head_pop_i    (head_pop),
-    .head_valid_o  (head_valid),
-    .head_tag_o    (head_tag),
-    .empty_o       (empty),
-    .full_o        (full),
-    .count_o       (count)
+    .clk_i              (clk),
+    .rst_i              (rst),
+    .alloc_valid_i      (alloc_valid),
+    .alloc_payload_i    (alloc_payload),
+    .alloc_ready_o      (alloc_ready),
+    .alloc_tag_o        (alloc_tag),
+    .complete_valid_i   (complete_valid),
+    .complete_tag_i     (complete_tag),
+    .complete_result_i  (complete_result),
+    .head_pop_i         (head_pop),
+    .head_valid_o       (head_valid),
+    .head_tag_o         (head_tag),
+    .head_entry_o       (head_entry),
+    .empty_o            (empty),
+    .full_o             (full),
+    .count_o            (count)
   );
 
   initial begin
@@ -160,6 +170,10 @@ module rv32_rob_tb;
   initial begin
     rst = 1'b0;
     alloc_valid = 1'b0;
+    alloc_payload = '0;
+    complete_valid = 1'b0;
+    complete_tag = '0;
+    complete_result = '0;
     head_pop = 1'b0;
     errors = 0;
 

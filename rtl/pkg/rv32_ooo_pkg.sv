@@ -18,7 +18,22 @@ package rv32_ooo_pkg;
     logic [ROB_INDEX_WIDTH-1:0] index;
   } rob_tag_t;
 
-  // Stored entry and completion types are added with the next ROB milestone;
-  // this stage only needs queue geometry and instruction identity.
+  typedef struct packed {
+    logic [31:0] pc;
+    logic [31:0] instr;
+    logic [4:0]  rd;
+    logic        reg_write;
+  } rob_alloc_payload_t;
+
+  typedef struct packed {
+    logic               valid;
+    logic               completed;
+    logic               generation;
+    rob_alloc_payload_t payload;
+    logic [31:0]        result;
+  } rob_entry_t;
+
+  // An allocated entry records architectural identity immediately. Result and
+  // completed are initialized on allocation and updated by tagged completion.
 
 endpackage
