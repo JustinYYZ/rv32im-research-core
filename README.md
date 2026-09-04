@@ -75,7 +75,7 @@ flowchart LR
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies the implemented ROB allocation, occupancy, payload-storage, and tagged-completion foundation whose retirement behavior remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies the implemented ROB allocation, occupancy, payload-storage, tagged-completion, and in-order-retirement foundation; integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -133,7 +133,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB with allocation ordering, occupancy, payload storage, and tagged out-of-order result completion; retirement and the integrated out-of-order core remain planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB with allocation ordering, occupancy, payload storage, tagged out-of-order result completion, and backpressured in-order retirement; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -152,7 +152,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
 - a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
-- a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, ordered pop behavior, and simultaneous allocation/pop handling;
+- a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
@@ -296,7 +296,7 @@ flowchart LR
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经实现的 ROB allocation、occupancy、payload storage 和 tagged completion 基础，其 retirement 行为仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经实现的 ROB allocation、occupancy、payload storage、tagged completion 和顺序 retirement 基础，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -353,7 +353,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB，支持 allocation order、occupancy、payload storage 和 tagged out-of-order result completion；retirement 和完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB，支持 allocation order、occupancy、payload storage、tagged out-of-order result completion 和带 backpressure 的顺序 retirement；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -371,7 +371,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
 - pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
-- 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、顺序 pop 以及同周期 allocation/pop 行为；
+- 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。

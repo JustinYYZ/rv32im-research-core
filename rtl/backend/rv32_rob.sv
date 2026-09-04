@@ -4,8 +4,8 @@
 //
 // The module tracks allocation order and occupancy while storing each
 // instruction's PC, encoding, architectural destination, and execution result.
-// Results complete by tag and may arrive out of order; architectural retirement
-// is added in the next milestone.
+// Results complete by tag and may arrive out of order. A ready/valid interface
+// retires only completed Head entries in program order.
 
 `timescale 1ns/1ps
 
@@ -24,7 +24,8 @@ module rv32_rob
     input  rob_tag_t                   complete_tag_i,
     input  logic [31:0]                complete_result_i,
 
-    input  logic                       head_pop_i,
+    input  logic                       retire_ready_i,
+    output logic                       retire_valid_o,
     output logic                       head_valid_o,
     output rob_tag_t                   head_tag_o,
     output rob_entry_t                 head_entry_o,
@@ -41,7 +42,7 @@ module rv32_rob
   logic [ROB_COUNT_WIDTH-1:0] count_q;
 
   logic alloc_fire;
-  logic pop_fire;
+  logic retire_fire;
   logic complete_match;
 
   logic [ROB_ENTRIES-1:0] entry_valid_q;
@@ -64,14 +65,15 @@ module rv32_rob
     head_tag_o.generation = head_generation_q;
     head_tag_o.index = head_index_q;
 
-    // A full ROB rejects allocation even when a pop is requested in the same
+    // A full ROB rejects allocation even when retirement is requested in the same
     // cycle. The freed slot becomes available on the following cycle.
     head_valid_o = !empty_o;
+    retire_valid_o = head_valid_o && entry_completed_q[head_index_q];
     alloc_ready_o = !full_o;
 
     // Only accepted requests may update queue state.
     alloc_fire = alloc_valid_i && alloc_ready_o;
-    pop_fire = head_pop_i && head_valid_o;
+    retire_fire = retire_valid_o && retire_ready_i;
 
     // A completion may update only the current valid use of the indexed slot.
     complete_match = complete_valid_i && entry_valid_q[complete_tag_i.index] &&
@@ -116,8 +118,8 @@ module rv32_rob
         end
       end
 
-      // Pop advances the head independently from the allocation pointer.
-      if (pop_fire) begin
+      // Retirement advances the head independently from the allocation pointer.
+      if (retire_fire) begin
         entry_valid_q[head_index_q] <= 1'b0;
         if (head_index_q == ROB_INDEX_WIDTH'(ROB_ENTRIES - 1)) begin
           head_index_q <= '0;
@@ -127,10 +129,10 @@ module rv32_rob
         end
       end
 
-      // Simultaneous allocation and pop leave occupancy unchanged.
-      if (alloc_fire && !pop_fire) begin
+      // Simultaneous allocation and retirement leave occupancy unchanged.
+      if (alloc_fire && !retire_fire) begin
         count_q <= count_q + 1;
-      end else if (!alloc_fire && pop_fire) begin
+      end else if (!alloc_fire && retire_fire) begin
         count_q <= count_q - 1;
       end
     end

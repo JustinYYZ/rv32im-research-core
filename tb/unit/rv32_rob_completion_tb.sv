@@ -18,7 +18,8 @@ module rv32_rob_completion_tb;
   rob_alloc_payload_t         alloc_payload;
   logic                       alloc_ready;
   rob_tag_t                   alloc_tag;
-  logic                       head_pop;
+  logic                       retire_ready;
+  logic                       retire_valid;
   logic                       head_valid;
   rob_tag_t                   head_tag;
   rob_entry_t                 head_entry;
@@ -47,7 +48,8 @@ module rv32_rob_completion_tb;
     .complete_valid_i   (complete_valid),
     .complete_tag_i     (complete_tag),
     .complete_result_i  (complete_result),
-    .head_pop_i         (head_pop),
+    .retire_ready_i     (retire_ready),
+    .retire_valid_o     (retire_valid),
     .head_valid_o       (head_valid),
     .head_tag_o         (head_tag),
     .head_entry_o       (head_entry),
@@ -68,7 +70,7 @@ module rv32_rob_completion_tb;
       @(negedge clk);
       rst = 1'b1;
       alloc_valid = 1'b0;
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       complete_valid = 1'b0;
       @(posedge clk);
       #1;
@@ -82,7 +84,7 @@ module rv32_rob_completion_tb;
   );
     begin
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       complete_valid = 1'b0;
       alloc_payload = payload;
       alloc_valid = 1'b1;
@@ -102,21 +104,21 @@ module rv32_rob_completion_tb;
     end
   endtask
 
-  task automatic pop_head;
+  task automatic retire_head;
     begin
       @(negedge clk);
       alloc_valid = 1'b0;
       complete_valid = 1'b0;
-      head_pop = 1'b1;
+      retire_ready = 1'b1;
       #1;
-      if (head_valid !== 1'b1) begin
-        $display("pop_head: ERROR - ROB head is not valid");
+      if (retire_valid !== 1'b1) begin
+        $display("retire_head: ERROR - ROB Head is not ready to retire");
         errors++;
       end
       @(posedge clk);
       #1;
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
     end
   endtask
 
@@ -128,7 +130,7 @@ module rv32_rob_completion_tb;
     begin
       @(negedge clk);
       alloc_valid = 1'b0;
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       complete_tag = result_tag;
       complete_result = result_value;
       complete_valid = 1'b1;
@@ -179,6 +181,10 @@ module rv32_rob_completion_tb;
         $display("ERROR: %s: head_entry.result mismatch; got %p, expected %p", test_name, head_entry.result, expected_result);
         errors++;
       end
+      if (retire_valid !== expected_completed) begin
+        $display("ERROR: %s: retire_valid mismatch; got %b, expected %b", test_name, retire_valid, expected_completed);
+        errors++;
+      end
     end
   endtask
 
@@ -186,7 +192,7 @@ module rv32_rob_completion_tb;
     rst = 1'b0;
     alloc_valid = 1'b0;
     alloc_payload = '0;
-    head_pop = 1'b0;
+    retire_ready = 1'b0;
     complete_valid = 1'b0;
     complete_tag = '0;
     complete_result = '0;
@@ -206,9 +212,12 @@ module rv32_rob_completion_tb;
 
     // Establish two valid, incomplete entries with payload_a at the head.
     #1;
-    if (head_valid !== 1'b0 || head_entry.valid !== 1'b0 ||
-    count !== 0) begin
+    if (head_valid !== 1'b0 || head_entry.valid !== 1'b0 || count !== 0) begin
       $display("completion reset: ERROR - ROB should be empty");
+      errors++;
+    end
+    if (retire_valid !== 1'b0) begin
+      $display("completion reset: ERROR - retire_valid should be low");
       errors++;
     end
     allocate_payload(payload_a, tag_a);
@@ -247,15 +256,15 @@ module rv32_rob_completion_tb;
       errors++;
     end
 
-    // After popping payload_a, payload_b exposes its earlier completion result.
-    pop_head();
-    check_head_entry("B after A pop", tag_b, payload_b, 1'b1, RESULT_B);
+    // After retiring payload_a, payload_b exposes its earlier completion result.
+    retire_head();
+    check_head_entry("B after A retirement", tag_b, payload_b, 1'b1, RESULT_B);
     if (count !== 1) begin
-      $display("pop A: ERROR - count=%0d, expected 1", count);
+      $display("retire A: ERROR - count=%0d, expected 1", count);
       errors++;
     end
     if (alloc_tag.generation !== 1'b0 || alloc_tag.index !== 2) begin
-      $display("pop A: ERROR - alloc_tag=%0b, expected 0:2", alloc_tag);
+      $display("retire A: ERROR - alloc_tag=%0b, expected 0:2", alloc_tag);
       errors++;
     end
 

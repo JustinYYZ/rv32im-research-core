@@ -18,7 +18,8 @@ module rv32_rob_storage_tb;
   logic                       complete_valid;
   rob_tag_t                   complete_tag;
   logic [31:0]                complete_result;
-  logic                       head_pop;
+  logic                       retire_ready;
+  logic                       retire_valid;
   logic                       head_valid;
   rob_tag_t                   head_tag;
   rob_entry_t                 head_entry;
@@ -42,7 +43,8 @@ module rv32_rob_storage_tb;
     .complete_valid_i   (complete_valid),
     .complete_tag_i     (complete_tag),
     .complete_result_i  (complete_result),
-    .head_pop_i         (head_pop),
+    .retire_ready_i     (retire_ready),
+    .retire_valid_o     (retire_valid),
     .head_valid_o       (head_valid),
     .head_tag_o         (head_tag),
     .head_entry_o       (head_entry),
@@ -61,7 +63,7 @@ module rv32_rob_storage_tb;
       @(negedge clk);
       rst = 1'b1;
       alloc_valid = 1'b0;
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       @(posedge clk);
       #1;
       rst = 1'b0;
@@ -76,7 +78,7 @@ module rv32_rob_storage_tb;
   );
     begin
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       alloc_payload = payload;
       alloc_valid = 1'b1;
       #1;
@@ -96,22 +98,39 @@ module rv32_rob_storage_tb;
     end
   endtask
 
-  // Drive one pop request across an accepting rising edge.
-  task automatic pop_head;
+  task automatic complete_entry(input rob_tag_t tag);
     begin
       @(negedge clk);
       alloc_valid = 1'b0;
-      head_pop = 1'b1;
+      retire_ready = 1'b0;
+      complete_tag = tag;
+      complete_result = '0;
+      complete_valid = 1'b1;
+      @(posedge clk);
+      #1;
+      @(negedge clk);
+      complete_valid = 1'b0;
+      complete_tag = '0;
+      complete_result = '0;
+    end
+  endtask
+
+  // Hold retirement ready across one accepting rising edge.
+  task automatic retire_head;
+    begin
+      @(negedge clk);
+      alloc_valid = 1'b0;
+      retire_ready = 1'b1;
       #1;
 
-      if (head_valid !== 1'b1) begin
-        $display("ERROR: pop_head: head_valid not high when expected");
+      if (retire_valid !== 1'b1) begin
+        $display("ERROR: retire_head: ROB Head is not ready to retire");
         errors++;
       end
       @(posedge clk);
       #1;
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
     end
   endtask
 
@@ -151,6 +170,10 @@ module rv32_rob_storage_tb;
         $display("ERROR: %s: head_entry.result not zero when expected", test_name);
         errors++;
       end
+      if (retire_valid !== 1'b0) begin
+        $display("ERROR: %s: incomplete head should not be ready to retire", test_name);
+        errors++;
+      end
     end
   endtask
 
@@ -158,10 +181,10 @@ module rv32_rob_storage_tb;
     rst = 1'b0;
     alloc_valid = 1'b0;
     alloc_payload = '0;
+    retire_ready = 1'b0;
     complete_valid = 1'b0;
     complete_tag = '0;
     complete_result = '0;
-    head_pop = 1'b0;
     errors = 0;
 
     payload_a.pc = 32'h0000_1000;
@@ -199,6 +222,10 @@ module rv32_rob_storage_tb;
       $display("ERROR: reset: head_entry.valid not low when expected");
       errors++;
     end
+    if (retire_valid !== 1'b0) begin
+      $display("ERROR: reset: retire_valid not low when expected");
+      errors++;
+    end
 
     // The first allocation becomes the visible, incomplete head entry.
     allocate_payload(payload_a, tag_a);
@@ -224,36 +251,38 @@ module rv32_rob_storage_tb;
       errors++;
     end
 
-    // Removing payload_a exposes payload_b as the next in-order entry.
-    pop_head();
-    check_head_entry("pop_head", tag_b, payload_b);
+    // Retiring payload_a exposes payload_b as the next in-order entry.
+    complete_entry(tag_a);
+    retire_head();
+    check_head_entry("after retiring payload_a", tag_b, payload_b);
     if (count !== 1) begin
-      $display("ERROR: pop_head: count not 1 when expected");
+      $display("ERROR: retire_head: count not 1 when expected");
       errors++;
     end
 
-    // Removing the final entry clears both queue validity and head-entry validity.
-    pop_head();
+    // Retiring the final entry clears both queue validity and head-entry validity.
+    complete_entry(tag_b);
+    retire_head();
     if (empty !== 1'b1) begin
-      $display("ERROR: pop_head: empty not high when expected");
+      $display("ERROR: retire_head: empty not high when expected");
       errors++;
     end
     if (count !== 0) begin
-      $display("ERROR: pop_head: count not 0 when expected");
+      $display("ERROR: retire_head: count not 0 when expected");
       errors++;
     end
     if (head_valid !== 1'b0) begin
-      $display("ERROR: pop_head: head_valid not low when expected");
+      $display("ERROR: retire_head: head_valid not low when expected");
       errors++;
     end
     if (head_entry.valid !== 1'b0) begin
-      $display("ERROR: pop_head: head_entry.valid not low when expected");
+      $display("ERROR: retire_head: head_entry.valid not low when expected");
       errors++;
     end
     if (errors != 0) begin
       $fatal(1, "rv32_rob_storage_tb: FAIL - %0d errors", errors);
     end
-    $display("rv32_rob_storage_tb: payload storage and head-order checks passed");
+    $display("rv32_rob_storage_tb: payload storage and retirement-order checks passed");
     $finish;
   end
 

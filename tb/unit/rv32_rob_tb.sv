@@ -4,7 +4,7 @@
 // Drive requests on a falling edge, let the DUT sample them on the following
 // rising edge, then wait #1 before checking state updated by nonblocking
 // assignments. Directed tests cover full/empty behavior, pointer wraparound,
-// ordered pop, and simultaneous allocation/pop requests.
+// ordered retirement, and simultaneous allocation/retirement requests.
 
 `timescale 1ns/1ps
 
@@ -19,7 +19,8 @@ module rv32_rob_tb;
   logic                       complete_valid;
   rob_tag_t                   complete_tag;
   logic [31:0]                complete_result;
-  logic                       head_pop;
+  logic                       retire_ready;
+  logic                       retire_valid;
   logic                       head_valid;
   rob_tag_t                   head_tag;
   logic                       empty;
@@ -29,7 +30,7 @@ module rv32_rob_tb;
   int unsigned errors;
 
   rob_tag_t accepted_tag;
-  rob_tag_t popped_tag;
+  rob_tag_t retired_tag;
   rob_alloc_payload_t alloc_payload;
   rob_entry_t head_entry;
 
@@ -43,7 +44,8 @@ module rv32_rob_tb;
     .complete_valid_i   (complete_valid),
     .complete_tag_i     (complete_tag),
     .complete_result_i  (complete_result),
-    .head_pop_i         (head_pop),
+    .retire_ready_i     (retire_ready),
+    .retire_valid_o     (retire_valid),
     .head_valid_o       (head_valid),
     .head_tag_o         (head_tag),
     .head_entry_o       (head_entry),
@@ -62,7 +64,8 @@ module rv32_rob_tb;
       @(negedge clk);
       rst = 1'b1;
       alloc_valid = 1'b0;
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
+      complete_valid = 1'b0;
       @(posedge clk);
       #1;
       rst = 1'b0;
@@ -128,7 +131,7 @@ module rv32_rob_tb;
   task automatic allocate_one(output rob_tag_t allocated_tag);
     begin
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
       alloc_valid = 1'b1;
       #1;
       if (alloc_ready !== 1'b1) begin
@@ -145,25 +148,42 @@ module rv32_rob_tb;
     end
   endtask
 
-  // Capture head_tag before the accepting edge because a pop advances the
-  // visible head at that edge.
-  task automatic pop_one(output rob_tag_t removed_tag);
+  task automatic complete_entry(input rob_tag_t tag);
     begin
       @(negedge clk);
       alloc_valid = 1'b0;
-      head_pop = 1'b1;
+      retire_ready = 1'b0;
+      complete_tag = tag;
+      complete_result = '0;
+      complete_valid = 1'b1;
+      @(posedge clk);
       #1;
-      if (head_valid !== 1'b1) begin
-        $display("pop_one: ERROR - ROB head is not valid");
+      @(negedge clk);
+      complete_valid = 1'b0;
+      complete_tag = '0;
+      complete_result = '0;
+    end
+  endtask
+
+  // Capture head_tag before the accepting edge because retirement advances the
+  // visible head at that edge.
+  task automatic retire_one(output rob_tag_t retired_tag);
+    begin
+      @(negedge clk);
+      alloc_valid = 1'b0;
+      retire_ready = 1'b1;
+      #1;
+      if (retire_valid !== 1'b1) begin
+        $display("retire_one: ERROR - ROB Head is not ready to retire");
         errors++;
-        removed_tag = 'x;
+        retired_tag = 'x;
       end else begin
-        removed_tag = head_tag;
+        retired_tag = head_tag;
       end
       @(posedge clk);
       #1;
       @(negedge clk);
-      head_pop = 1'b0;
+      retire_ready = 1'b0;
     end
   endtask
 
@@ -171,10 +191,10 @@ module rv32_rob_tb;
     rst = 1'b0;
     alloc_valid = 1'b0;
     alloc_payload = '0;
+    retire_ready = 1'b0;
     complete_valid = 1'b0;
     complete_tag = '0;
     complete_result = '0;
-    head_pop = 1'b0;
     errors = 0;
 
     reset_dut();
@@ -204,7 +224,7 @@ module rv32_rob_tb;
     check_state("full ROB", 1'b0, 1'b1, ROB_ENTRIES, 1'b1, 1'b0, 0, 1'b0, 1'b1, 0);
     @(negedge clk);
     alloc_valid = 1'b1;
-    head_pop = 1'b0;
+    retire_ready = 1'b0;
     #1;
     if (alloc_ready !== 1'b0) begin
       $display("full ROB: ERROR - alloc_ready=%0b, expected 0", alloc_ready);
@@ -216,20 +236,22 @@ module rv32_rob_tb;
     @(negedge clk);
     alloc_valid = 1'b0;
 
-    pop_one(popped_tag);
-    if (popped_tag.generation !== 1'b0 || popped_tag.index !== '0) begin
-      $display("pop_one: ERROR - popped_tag=%0b, expected generation=0 index=0", popped_tag);
+    complete_entry(head_tag);
+    retire_one(retired_tag);
+    if (retired_tag.generation !== 1'b0 || retired_tag.index !== '0) begin
+      $display("retire_one: ERROR - retired tag=%0b, expected generation=0 index=0", retired_tag);
       errors++;
     end
-    check_state("after first pop", 1'b0, 1'b0, ROB_ENTRIES-1, 1'b1, 1'b0, 1, 1'b1, 1'b1, 0);
+    check_state("after first retirement", 1'b0, 1'b0, ROB_ENTRIES-1, 1'b1, 1'b0, 1, 1'b1, 1'b1, 0);
     for (int unsigned expected_index = 1; expected_index < ROB_ENTRIES; expected_index++) begin
-      pop_one(popped_tag);
-      if (popped_tag.generation !== 1'b0 || popped_tag.index !== expected_index[ROB_INDEX_WIDTH-1:0]) begin
-        $display("pop_one: ERROR - popped_tag=%0b, expected generation=0 index=%0d", popped_tag, expected_index);
+      complete_entry(head_tag);
+      retire_one(retired_tag);
+      if (retired_tag.generation !== 1'b0 || retired_tag.index !== expected_index[ROB_INDEX_WIDTH-1:0]) begin
+        $display("retire_one: ERROR - retired tag=%0b, expected generation=0 index=%0d", retired_tag, expected_index);
         errors++;
       end
     end
-    check_state("empty ROB after pops", 1'b1, 1'b0, 0, 1'b0, 1'b1, '0, 1'b1, 1'b1, 0);
+    check_state("empty ROB after retirements", 1'b1, 1'b0, 0, 1'b0, 1'b1, '0, 1'b1, 1'b1, 0);
 
     allocate_one(accepted_tag);
     if (accepted_tag.generation !== 1'b1 || accepted_tag.index !== '0) begin
@@ -237,60 +259,62 @@ module rv32_rob_tb;
       errors++;
     end
     check_state("after wraparound allocation", 1'b0, 1'b0, 1, 1'b1, 1'b1, '0, 1'b1, 1'b1, 1);
+    complete_entry(head_tag);
     @(negedge clk);
     alloc_valid = 1'b1;
-    head_pop = 1'b1;
+    retire_ready = 1'b1;
     #1;
 
-    if (alloc_ready !== 1'b1 || head_valid !== 1'b1) begin
-      $display("simultaneous alloc/pop: ERROR - alloc_ready=%0b, head_valid=%0b, expected 1/1", alloc_ready, head_valid);
+    if (alloc_ready !== 1'b1 || retire_valid !== 1'b1) begin
+      $display("simultaneous allocation/retirement: ERROR - alloc_ready=%0b, retire_valid=%0b, expected 1/1", alloc_ready, retire_valid);
       errors++;
     end
     accepted_tag = alloc_tag;
-    popped_tag = head_tag;
+    retired_tag = head_tag;
     @(posedge clk);
     #1;
     if (accepted_tag.generation !== 1'b1 || accepted_tag.index !== 1) begin
-      $display("simultaneous alloc/pop: ERROR - accepted_tag=%0b, expected generation=1 index=1", accepted_tag);
+      $display("simultaneous allocation/retirement: ERROR - accepted tag=%0b, expected generation=1 index=1", accepted_tag);
       errors++;
     end
-    if (popped_tag.generation !== 1'b1 || popped_tag.index !== '0) begin
-      $display("simultaneous alloc/pop: ERROR - popped_tag=%0b, expected generation=1 index=0", popped_tag);
+    if (retired_tag.generation !== 1'b1 || retired_tag.index !== '0) begin
+      $display("simultaneous allocation/retirement: ERROR - retired tag=%0b, expected generation=1 index=0", retired_tag);
       errors++;
     end
-    check_state("after simultaneous alloc/pop", 1'b0, 1'b0, 1, 1'b1, 1'b1, 1, 1'b1, 1'b1, 2);
+    check_state("after simultaneous allocation/retirement", 1'b0, 1'b0, 1, 1'b1, 1'b1, 1, 1'b1, 1'b1, 2);
     @(negedge clk);
     alloc_valid = 1'b0;
-    head_pop = 1'b0;
+    retire_ready = 1'b0;
 
     for (int unsigned i = 0; i < ROB_ENTRIES-1; i++) begin
       allocate_one(accepted_tag);
     end
     check_state("full ROB after wraparound allocations", 1'b0, 1'b1, ROB_ENTRIES, 1'b1, 1'b1, 1, 1'b0, 1'b0, 1);
+    complete_entry(head_tag);
     @(negedge clk);
     alloc_valid = 1'b1;
-    head_pop = 1'b1;
+    retire_ready = 1'b1;
     #1;
-    if (alloc_ready !== 1'b0 || head_valid !== 1'b1) begin
-      $display("simultaneous alloc/pop at full ROB: ERROR - alloc_ready=%0b, head_valid=%0b, expected 0/1", alloc_ready, head_valid);
+    if (alloc_ready !== 1'b0 || retire_valid !== 1'b1) begin
+      $display("full simultaneous allocation/retirement: ERROR - alloc_ready=%0b, retire_valid=%0b, expected 0/1", alloc_ready, retire_valid);
       errors++;
     end
-    popped_tag = head_tag;
+    retired_tag = head_tag;
     @(posedge clk);
     #1;
-    if (popped_tag.generation !== 1'b1 || popped_tag.index !== 1) begin
-      $display("simultaneous alloc/pop at full ROB: ERROR - popped_tag=%0b, expected generation=1 index=1", popped_tag);
+    if (retired_tag.generation !== 1'b1 || retired_tag.index !== 1) begin
+      $display("full simultaneous allocation/retirement: ERROR - retired tag=%0b, expected generation=1 index=1", retired_tag);
       errors++;
     end
-    check_state("after simultaneous alloc/pop at full ROB", 1'b0, 1'b0, ROB_ENTRIES - 1, 1'b1, 1'b1, 2, 1'b1, 1'b0, 1);
+    check_state("after full simultaneous allocation/retirement", 1'b0, 1'b0, ROB_ENTRIES - 1, 1'b1, 1'b1, 2, 1'b1, 1'b0, 1);
     @(negedge clk);
     alloc_valid = 1'b0;
-    head_pop = 1'b0;
+    retire_ready = 1'b0;
 
     if (errors !== 0) begin
-      $fatal(1, "rv32_rob_tb: Test failed with %0d errors", errors);
+      $fatal(1, "rv32_rob_tb: FAIL - %0d errors", errors);
     end else begin
-      $display("rv32_rob_tb: allocation, full, pop, wraparound, and simultaneous-operation checks passed");
+      $display("rv32_rob_tb: allocation, occupancy, wraparound, and simultaneous retirement checks passed");
     end
     $finish;
   end
