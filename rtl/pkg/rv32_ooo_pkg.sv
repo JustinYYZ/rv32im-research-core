@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Shared parameters and identity types for the out-of-order backend.
-// The first milestone uses a circular 16-entry ROB. A tag contains both the
-// physical slot index and a generation bit so that a delayed result from an
-// old use of a slot cannot be mistaken for a newly allocated instruction.
+// Shared parameters and identity types for the out-of-order backend. ROB tags
+// include a generation bit so a delayed result from an old use of a slot cannot
+// be mistaken for a newly allocated instruction.
 
 `timescale 1ns/1ps
 
@@ -33,7 +32,10 @@ package rv32_ooo_pkg;
     logic [31:0]        result;
   } rob_entry_t;
 
-  // An allocated entry records architectural identity immediately. Result and
-  // completed are initialized on allocation and updated by tagged completion.
+  // Rename, scheduling, writeback, and the PRF exchange the same physical
+  // register identifiers through this shared type.
+  localparam int unsigned PHYS_REGS = 64;
+  localparam int unsigned PHYS_REG_INDEX_WIDTH = $clog2(PHYS_REGS);
+  typedef logic [PHYS_REG_INDEX_WIDTH-1:0] phys_reg_idx_t;
 
 endpackage
