@@ -51,7 +51,8 @@ flowchart LR
     L2 <--> MEM[Memory]
     FETCH --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
-    RENAME --> RAT["RAT / Free List"]
+    RENAME --> RAT["RAT / RRAT"]
+    FL["Free List"] --> RENAME
     RENAME --> PRF["Physical Register File"]
     RENAME --> ROB[ROB]
     RENAME --> RS["Reservation Stations"]
@@ -67,18 +68,19 @@ flowchart LR
     COMPLETE --> PRF
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
+    COMMIT --> RAT
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF partial
-    class L2,RENAME,RAT,RS,COMPLETE planned
+    class ROB,PRF,RAT partial
+    class L2,RENAME,FL,RS,COMPLETE planned
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the ROB and physical register file. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the ROB, physical register file, and RAT/RRAT mapping tables. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -92,7 +94,7 @@ All cores are intended to share the same memory and architectural commit interfa
 
 Verification is developed together with the RTL:
 
-- directed unit tests for decoder, ALU, architectural and physical register files, branch, LSU, mul/div, and ROB behavior;
+- directed unit tests for decoder, ALU, architectural and physical register files, rename maps, branch, LSU, mul/div, and ROB behavior;
 - instruction-level assembly tests;
 - randomized instruction and memory-response latency tests;
 - a common architectural commit trace;
@@ -136,7 +138,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB and a tested 64-entry physical register file; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB, a tested 64-entry physical register file, and tested speculative/committed rename maps; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -157,6 +159,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
 - a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
 - a 64-entry physical register file with two combinational read ports, allocation-based readiness tracking, one completion writeback port, hardwired p0 behavior, and allocation priority on same-register collisions;
+- 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
@@ -226,6 +229,7 @@ Run the standalone out-of-order backend structure regressions with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-phys-regfile
+make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
 ```
 
@@ -283,7 +287,8 @@ flowchart LR
     L2 <--> MEM[Memory]
     FETCH --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
-    RENAME --> RAT["RAT / Free List"]
+    RENAME --> RAT["RAT / RRAT"]
+    FL["Free List"] --> RENAME
     RENAME --> PRF["Physical Register File"]
     RENAME --> ROB[ROB]
     RENAME --> RS["Reservation Stations"]
@@ -299,18 +304,19 @@ flowchart LR
     COMPLETE --> PRF
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
+    COMMIT --> RAT
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF partial
-    class L2,RENAME,RAT,RS,COMPLETE planned
+    class ROB,PRF,RAT partial
+    class L2,RENAME,FL,RS,COMPLETE planned
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即 ROB 和物理寄存器文件，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即 ROB、物理寄存器文件和 RAT/RRAT 映射表，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -324,7 +330,7 @@ flowchart LR
 
 验证环境和 RTL 同步开发：
 
-- decoder、ALU、架构/物理寄存器文件、branch、LSU、mul/div 和 ROB 单元测试；
+- decoder、ALU、架构/物理寄存器文件、重命名映射表、branch、LSU、mul/div 和 ROB 单元测试；
 - 指令级汇编测试；
 - 随机指令和随机 memory response latency；
 - 统一 architectural commit trace；
@@ -367,7 +373,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB 和一个 64-entry 物理寄存器文件；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB、一个 64-entry 物理寄存器文件和推测/已提交重命名映射表；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -387,6 +393,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
 - 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
 - 64-entry 物理寄存器文件，具有两个组合读端口、allocation ready-state tracking、单 completion writeback 端口、固定 p0 行为以及同地址冲突时的 allocation 优先级；
+- 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
@@ -456,6 +463,7 @@ make CAD_ENV=/path/to/env.sh test-dcache
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-phys-regfile
+make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
 ```
 
