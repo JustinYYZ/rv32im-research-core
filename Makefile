@@ -37,6 +37,12 @@ RENAME_MAP_SRCS := \
 	rtl/backend/rv32_rename_map.sv \
 	tb/unit/rv32_rename_map_tb.sv
 
+FREE_LIST_TEST := $(BUILD_DIR)/rv32_free_list_tb
+FREE_LIST_SRCS := \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_free_list.sv \
+	tb/unit/rv32_free_list_tb.sv
+
 ROB_TEST := $(BUILD_DIR)/rv32_rob_tb
 ROB_SRCS := \
 	rtl/pkg/rv32_ooo_pkg.sv \
@@ -311,7 +317,7 @@ DCACHE_SRCS := \
 	rtl/cache/rv32_dcache.sv \
 	tb/cache/rv32_dcache_tb.sv
 
-.PHONY: test test-alu test-regfile test-phys-regfile test-rename-map test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
+.PHONY: test test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
@@ -322,7 +328,7 @@ DCACHE_SRCS := \
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
 
-test: test-alu test-regfile test-phys-regfile test-rename-map test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -358,6 +364,15 @@ $(RENAME_MAP_TEST): $(RENAME_MAP_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_rename_map_tb -o $@ $(RENAME_MAP_SRCS)'
+
+# Compile and run the physical-register free-list regression.
+test-free-list: $(FREE_LIST_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(FREE_LIST_TEST): $(FREE_LIST_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_free_list_tb -o $@ $(FREE_LIST_SRCS)'
 
 # Compile and run the ROB allocation-order and occupancy regression.
 test-rob: $(ROB_TEST)
@@ -657,5 +672,5 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
-	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
+	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(FREE_LIST_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
 		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)
