@@ -32,7 +32,7 @@ The planned processor scope is:
 - five-stage in-order pipeline;
 - separate L1 instruction and data caches;
 - unified L2 cache;
-- register renaming, physical register file, reorder buffer, and reservation stations;
+- register renaming, physical register file, reorder buffer, and an issue queue;
 - out-of-order execution with in-order retirement;
 - commit-level differential verification;
 - synthesis and timing evaluation with Yosys and OpenROAD.
@@ -55,11 +55,11 @@ flowchart LR
     FL["Free List"] --> RENAME
     RENAME --> PRF["Physical Register File"]
     RENAME --> ROB[ROB]
-    RENAME --> RS["Reservation Stations"]
-    PRF --> RS
-    RS --> ALU[ALU]
-    RS --> MULDIV["MUL / DIV"]
-    RS --> LSU[LSU]
+    RENAME --> IQ["Issue Queue"]
+    PRF --> IQ
+    IQ --> ALU[ALU]
+    IQ --> MULDIV["MUL / DIV"]
+    IQ --> LSU[LSU]
     LSU <--> L1D["L1 D-cache"]
     L1D <--> L2
     ALU --> COMPLETE[Completion]
@@ -75,12 +75,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF,RAT,FL partial
-    class L2,RENAME,RS,COMPLETE planned
+    class ROB,PRF,RAT,FL,IQ partial
+    class L2,RENAME,COMPLETE planned
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the ROB, physical register file, RAT/RRAT mapping tables, and recoverable physical-register free list. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the ROB, physical register file, RAT/RRAT mapping tables, recoverable physical-register free list, and issue queue. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -94,7 +94,7 @@ All cores are intended to share the same memory and architectural commit interfa
 
 Verification is developed together with the RTL:
 
-- directed unit tests for decoder, ALU, architectural and physical register files, rename maps, physical-register allocation, branch, LSU, mul/div, and ROB behavior;
+- directed unit tests for decoder, ALU, architectural and physical register files, rename maps, physical-register allocation, branch, LSU, mul/div, ROB, and issue-queue behavior;
 - instruction-level assembly tests;
 - randomized instruction and memory-response latency tests;
 - a common architectural commit trace;
@@ -138,7 +138,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB, a tested 64-entry physical register file, tested speculative/committed rename maps, and a tested recoverable physical-register free list; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB, a tested 64-entry physical register file, tested speculative/committed rename maps, a tested recoverable physical-register free list, and a tested eight-entry issue queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -161,6 +161,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a 64-entry physical register file with two combinational read ports, allocation-based readiness tracking, one completion writeback port, hardwired p0 behavior, and allocation priority on same-register collisions;
 - 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
 - a 64-entry physical-register free list with lowest-index allocation, speculative and committed availability maps, retirement-based old-mapping release, fixed p0 exclusion, exhaustion backpressure, and recovery that includes same-cycle retirement;
+- an eight-entry, single-dispatch, single-issue queue with physical-tag wakeup, same-cycle Dispatch/CDB handling, functional-unit backpressure, deterministic lowest-slot selection, simultaneous Dispatch/Issue occupancy handling, and recovery Flush;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
@@ -232,6 +233,7 @@ Run the standalone out-of-order backend structure regressions with:
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
+make CAD_ENV=/path/to/env.sh test-issue-queue
 make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
 ```
 
@@ -271,7 +273,7 @@ RV32IM Research Core 是一个使用 SystemVerilog 开发的可综合 RISC-V 处
 - 五级顺序流水线；
 - 分离的 L1 instruction/data cache；
 - unified L2 cache；
-- register renaming、physical register file、ROB 和 reservation stations；
+- register renaming、physical register file、ROB 和 Issue Queue；
 - 乱序执行、顺序退休；
 - commit-level differential verification；
 - 使用 Yosys/OpenROAD 进行综合和时序实验。
@@ -293,11 +295,11 @@ flowchart LR
     FL["Free List"] --> RENAME
     RENAME --> PRF["Physical Register File"]
     RENAME --> ROB[ROB]
-    RENAME --> RS["Reservation Stations"]
-    PRF --> RS
-    RS --> ALU[ALU]
-    RS --> MULDIV["MUL / DIV"]
-    RS --> LSU[LSU]
+    RENAME --> IQ["Issue Queue"]
+    PRF --> IQ
+    IQ --> ALU[ALU]
+    IQ --> MULDIV["MUL / DIV"]
+    IQ --> LSU[LSU]
     LSU <--> L1D["L1 D-cache"]
     L1D <--> L2
     ALU --> COMPLETE[Completion]
@@ -313,12 +315,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF,RAT,FL partial
-    class L2,RENAME,RS,COMPLETE planned
+    class ROB,PRF,RAT,FL,IQ partial
+    class L2,RENAME,COMPLETE planned
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即 ROB、物理寄存器文件、RAT/RRAT 映射表和支持恢复的物理寄存器 Free List，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即 ROB、物理寄存器文件、RAT/RRAT 映射表、支持恢复的物理寄存器 Free List 和 Issue Queue，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -332,7 +334,7 @@ flowchart LR
 
 验证环境和 RTL 同步开发：
 
-- decoder、ALU、架构/物理寄存器文件、重命名映射表、物理寄存器分配、branch、LSU、mul/div 和 ROB 单元测试；
+- decoder、ALU、架构/物理寄存器文件、重命名映射表、物理寄存器分配、branch、LSU、mul/div、ROB 和 Issue Queue 单元测试；
 - 指令级汇编测试；
 - 随机指令和随机 memory response latency；
 - 统一 architectural commit trace；
@@ -375,7 +377,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表和支持恢复的物理寄存器 Free List；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -397,6 +399,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 64-entry 物理寄存器文件，具有两个组合读端口、allocation ready-state tracking、单 completion writeback 端口、固定 p0 行为以及同地址冲突时的 allocation 优先级；
 - 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
 - 64-entry 物理寄存器 Free List，支持最低编号优先分配、推测/已提交空闲状态、retirement 释放旧映射、固定排除 p0、耗尽 backpressure，以及包含同周期 retirement 的恢复；
+- 8-entry 单 Dispatch、单 Issue 调度队列，支持物理 tag 唤醒、同周期 Dispatch/CDB 处理、功能单元 backpressure、确定性的最低槽位选择、同周期 Dispatch/Issue occupancy 更新和 recovery Flush；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
@@ -468,6 +471,7 @@ make CAD_ENV=/path/to/env.sh test-dcache
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
+make CAD_ENV=/path/to/env.sh test-issue-queue
 make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
 ```
 

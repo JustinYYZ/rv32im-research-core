@@ -38,4 +38,30 @@ package rv32_ooo_pkg;
   localparam int unsigned PHYS_REG_INDEX_WIDTH = $clog2(PHYS_REGS);
   typedef logic [PHYS_REG_INDEX_WIDTH-1:0] phys_reg_idx_t;
 
+  localparam int unsigned ISSUE_ENTRIES = 8;
+  localparam int unsigned ISSUE_INDEX_WIDTH = $clog2(ISSUE_ENTRIES);
+  localparam int unsigned ISSUE_COUNT_WIDTH = $clog2(ISSUE_ENTRIES + 1);
+
+  typedef enum logic [2:0] {
+    FU_ALU,
+    FU_BRANCH,
+    FU_MUL,
+    FU_DIV,
+    FU_MEMORY
+  } fu_kind_e;
+  localparam int unsigned FU_COUNT = 5;
+
+  // Renamed instruction identity shared by Dispatch, scheduling, and Issue.
+  // Source readiness remains separate because CDB wakeup changes it in place.
+  typedef struct packed {
+    rob_tag_t       rob_tag;
+    phys_reg_idx_t  phys_rs1;
+    phys_reg_idx_t  phys_rs2;
+    phys_reg_idx_t  phys_rd;
+    logic           rs1_used;
+    logic           rs2_used;
+    logic           rd_write;
+    fu_kind_e       fu_kind;
+  } issue_uop_t;
+
 endpackage

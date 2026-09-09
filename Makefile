@@ -43,6 +43,12 @@ FREE_LIST_SRCS := \
 	rtl/backend/rv32_free_list.sv \
 	tb/unit/rv32_free_list_tb.sv
 
+ISSUE_QUEUE_TEST := $(BUILD_DIR)/rv32_issue_queue_tb
+ISSUE_QUEUE_SRCS := \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_issue_queue.sv \
+	tb/unit/rv32_issue_queue_tb.sv
+
 ROB_TEST := $(BUILD_DIR)/rv32_rob_tb
 ROB_SRCS := \
 	rtl/pkg/rv32_ooo_pkg.sv \
@@ -317,7 +323,7 @@ DCACHE_SRCS := \
 	rtl/cache/rv32_dcache.sv \
 	tb/cache/rv32_dcache_tb.sv
 
-.PHONY: test test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
+.PHONY: test test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
@@ -328,7 +334,7 @@ DCACHE_SRCS := \
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
 
-test: test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -373,6 +379,15 @@ $(FREE_LIST_TEST): $(FREE_LIST_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_free_list_tb -o $@ $(FREE_LIST_SRCS)'
+
+# Compile and run the out-of-order wakeup/select queue regression.
+test-issue-queue: $(ISSUE_QUEUE_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(ISSUE_QUEUE_TEST): $(ISSUE_QUEUE_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_issue_queue_tb -o $@ $(ISSUE_QUEUE_SRCS)'
 
 # Compile and run the ROB allocation-order and occupancy regression.
 test-rob: $(ROB_TEST)
