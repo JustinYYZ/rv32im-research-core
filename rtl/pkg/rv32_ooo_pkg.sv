@@ -8,6 +8,19 @@
 
 package rv32_ooo_pkg;
 
+  localparam int unsigned FETCH_QUEUE_ENTRIES = 8;
+  localparam int unsigned FETCH_QUEUE_INDEX_WIDTH = $clog2(FETCH_QUEUE_ENTRIES);
+  localparam int unsigned FETCH_QUEUE_COUNT_WIDTH = $clog2(FETCH_QUEUE_ENTRIES + 1);
+
+  // Fetch validity travels through the Queue ready/valid interface rather than
+  // being duplicated inside the payload.
+  typedef struct packed {
+    logic [31:0] pc;
+    logic [31:0] instr;
+    logic [31:0] predicted_next_pc;
+    logic        access_fault;
+  } fetch_entry_t;
+
   localparam int unsigned ROB_ENTRIES = 16;
   localparam int unsigned ROB_INDEX_WIDTH = $clog2(ROB_ENTRIES);
   localparam int unsigned ROB_COUNT_WIDTH = $clog2(ROB_ENTRIES + 1);

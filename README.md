@@ -49,7 +49,8 @@ flowchart LR
     FETCH <--> L1I["L1 I-cache"]
     L1I <--> L2["Unified L2 cache"]
     L2 <--> MEM[Memory]
-    FETCH --> DECODE[Decode]
+    FETCH --> FQ["Fetch Queue"]
+    FQ --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
     RENAME --> RAT["RAT / RRAT"]
     FL["Free List"] --> RENAME
@@ -75,12 +76,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF,RAT,FL,IQ partial
+    class FQ,ROB,PRF,RAT,FL,IQ partial
     class L2,RENAME,COMPLETE planned
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the ROB, physical register file, RAT/RRAT mapping tables, recoverable physical-register free list, and issue queue. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the frontend Fetch Queue, ROB, physical register file, RAT/RRAT mapping tables, recoverable physical-register free list, and Issue Queue. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -94,7 +95,7 @@ All cores are intended to share the same memory and architectural commit interfa
 
 Verification is developed together with the RTL:
 
-- directed unit tests for decoder, ALU, architectural and physical register files, rename maps, physical-register allocation, branch, LSU, mul/div, ROB, and issue-queue behavior;
+- directed unit tests for decoder, ALU, architectural and physical register files, Fetch Queue, rename maps, physical-register allocation, branch, LSU, mul/div, ROB, and Issue Queue behavior;
 - instruction-level assembly tests;
 - randomized instruction and memory-response latency tests;
 - a common architectural commit trace;
@@ -138,7 +139,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order backend foundation now includes a tested 16-entry ROB, a tested 64-entry physical register file, tested speculative/committed rename maps, a tested recoverable physical-register free list, and a tested eight-entry issue queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order foundation now includes a tested eight-entry frontend Fetch Queue, 16-entry ROB, 64-entry physical register file, speculative/committed rename maps, recoverable physical-register free list, and eight-entry Issue Queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -157,6 +158,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
 - a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
+- an eight-entry Fetch Queue with ready/valid flow control, FIFO ordering, full-Queue simultaneous replacement, explicit pointer wraparound, instruction-fault metadata, and recovery Flush;
 - a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
 - a 64-entry physical register file with two combinational read ports, allocation-based readiness tracking, one completion writeback port, hardwired p0 behavior, and allocation priority on same-register collisions;
 - 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
@@ -227,9 +229,10 @@ Run the standalone L1 D-cache regression with:
 make CAD_ENV=/path/to/env.sh test-dcache
 ```
 
-Run the standalone out-of-order backend structure regressions with:
+Run the standalone out-of-order frontend and backend structure regressions with:
 
 ```bash
+make CAD_ENV=/path/to/env.sh test-fetch-queue
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
@@ -289,7 +292,8 @@ flowchart LR
     FETCH <--> L1I["L1 I-cache"]
     L1I <--> L2["Unified L2 cache"]
     L2 <--> MEM[Memory]
-    FETCH --> DECODE[Decode]
+    FETCH --> FQ["Fetch Queue"]
+    FQ --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
     RENAME --> RAT["RAT / RRAT"]
     FL["Free List"] --> RENAME
@@ -315,12 +319,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class ROB,PRF,RAT,FL,IQ partial
+    class FQ,ROB,PRF,RAT,FL,IQ partial
     class L2,RENAME,COMPLETE planned
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即 ROB、物理寄存器文件、RAT/RRAT 映射表、支持恢复的物理寄存器 Free List 和 Issue Queue，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即前端 Fetch Queue、ROB、物理寄存器文件、RAT/RRAT 映射表、支持恢复的物理寄存器 Free List 和 Issue Queue，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -334,7 +338,7 @@ flowchart LR
 
 验证环境和 RTL 同步开发：
 
-- decoder、ALU、架构/物理寄存器文件、重命名映射表、物理寄存器分配、branch、LSU、mul/div、ROB 和 Issue Queue 单元测试；
+- decoder、ALU、架构/物理寄存器文件、Fetch Queue、重命名映射表、物理寄存器分配、branch、LSU、mul/div、ROB 和 Issue Queue 单元测试；
 - 指令级汇编测试；
 - 随机指令和随机 memory response latency；
 - 统一 architectural commit trace；
@@ -377,7 +381,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序后端已经实现并验证一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序执行基础结构已经实现并验证一个 8-entry 前端 Fetch Queue、一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -395,6 +399,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
 - pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
+- 8-entry Fetch Queue，支持 ready/valid flow control、FIFO 顺序、满队列同周期替换、显式指针回绕、取指错误信息和 recovery Flush；
 - 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
 - 64-entry 物理寄存器文件，具有两个组合读端口、allocation ready-state tracking、单 completion writeback 端口、固定 p0 行为以及同地址冲突时的 allocation 优先级；
 - 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
@@ -465,9 +470,10 @@ make CAD_ENV=/path/to/env.sh test-pipeline-l1
 make CAD_ENV=/path/to/env.sh test-dcache
 ```
 
-运行独立 OoO 后端数据结构 regression：
+运行独立 OoO 前端和后端数据结构 regression：
 
 ```bash
+make CAD_ENV=/path/to/env.sh test-fetch-queue
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
