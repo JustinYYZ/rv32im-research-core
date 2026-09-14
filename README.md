@@ -139,7 +139,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order foundation now includes a tested eight-entry frontend Fetch Queue, 16-entry ROB, 64-entry physical register file, speculative/committed rename maps, recoverable physical-register free list, and eight-entry Issue Queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order foundation now includes a tested single-request instruction frontend, eight-entry Fetch Queue, 16-entry ROB, 64-entry physical register file, speculative/committed rename maps, recoverable physical-register free list, and eight-entry Issue Queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -159,6 +159,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
 - an eight-entry Fetch Queue with ready/valid flow control, FIFO ordering, full-Queue simultaneous replacement, explicit pointer wraparound, instruction-fault metadata, and recovery Flush;
+- a single-request out-of-order instruction frontend with I-cache backpressure, Fetch Queue flow control, sequential PC generation, redirect recovery, epoch-based stale-response rejection, and instruction-access-fault metadata;
 - a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
 - a 64-entry physical register file with two combinational read ports, allocation-based readiness tracking, one completion writeback port, hardwired p0 behavior, and allocation priority on same-register collisions;
 - 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
@@ -233,6 +234,7 @@ Run the standalone out-of-order frontend and backend structure regressions with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-fetch-queue
+make CAD_ENV=/path/to/env.sh test-ooo-frontend
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
@@ -381,7 +383,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序执行基础结构已经实现并验证一个 8-entry 前端 Fetch Queue、一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序执行基础结构已经实现并验证单请求取指前端、一个 8-entry Fetch Queue、一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -400,6 +402,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
 - 8-entry Fetch Queue，支持 ready/valid flow control、FIFO 顺序、满队列同周期替换、显式指针回绕、取指错误信息和 recovery Flush；
+- 单请求 OoO 取指前端，支持 I-cache backpressure、Fetch Queue flow control、顺序 PC 生成、redirect recovery、基于 epoch 的旧响应丢弃和 instruction access fault 信息传递；
 - 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
 - 64-entry 物理寄存器文件，具有两个组合读端口、allocation ready-state tracking、单 completion writeback 端口、固定 p0 行为以及同地址冲突时的 allocation 优先级；
 - 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
@@ -474,6 +477,7 @@ make CAD_ENV=/path/to/env.sh test-dcache
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-fetch-queue
+make CAD_ENV=/path/to/env.sh test-ooo-frontend
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list

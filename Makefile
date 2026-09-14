@@ -31,6 +31,13 @@ FETCH_QUEUE_SRCS := \
 	rtl/frontend/rv32_fetch_queue.sv \
 	tb/unit/rv32_fetch_queue_tb.sv
 
+OOO_FRONTEND_TEST := $(BUILD_DIR)/rv32_ooo_frontend_tb
+OOO_FRONTEND_SRCS := \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/frontend/rv32_fetch_queue.sv \
+	rtl/frontend/rv32_ooo_frontend.sv \
+	tb/unit/rv32_ooo_frontend_tb.sv
+
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
 	rtl/pkg/rv32_ooo_pkg.sv \
@@ -329,7 +336,7 @@ DCACHE_SRCS := \
 	rtl/cache/rv32_dcache.sv \
 	tb/cache/rv32_dcache_tb.sv
 
-.PHONY: test test-alu test-regfile test-fetch-queue test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
+.PHONY: test test-alu test-regfile test-fetch-queue test-ooo-frontend test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
@@ -340,7 +347,7 @@ DCACHE_SRCS := \
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
 
-test: test-alu test-regfile test-fetch-queue test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -367,6 +374,15 @@ $(FETCH_QUEUE_TEST): $(FETCH_QUEUE_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_fetch_queue_tb -o $@ $(FETCH_QUEUE_SRCS)'
+
+# Compile and run the out-of-order instruction frontend regression.
+test-ooo-frontend: $(OOO_FRONTEND_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_FRONTEND_TEST): $(OOO_FRONTEND_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_frontend_tb -o $@ $(OOO_FRONTEND_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)
