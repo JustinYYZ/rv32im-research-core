@@ -30,11 +30,19 @@ package rv32_ooo_pkg;
     logic [ROB_INDEX_WIDTH-1:0] index;
   } rob_tag_t;
 
+  // Rename, scheduling, writeback, and the PRF exchange the same physical
+  // register identifiers through this shared type.
+  localparam int unsigned PHYS_REGS = 64;
+  localparam int unsigned PHYS_REG_INDEX_WIDTH = $clog2(PHYS_REGS);
+  typedef logic [PHYS_REG_INDEX_WIDTH-1:0] phys_reg_idx_t;
+
   typedef struct packed {
-    logic [31:0] pc;
-    logic [31:0] instr;
-    logic [4:0]  rd;
-    logic        reg_write;
+    logic [31:0]   pc;
+    logic [31:0]   instr;
+    logic [4:0]    rd;
+    logic          reg_write;
+    phys_reg_idx_t new_phys_rd;
+    phys_reg_idx_t old_phys_rd;
   } rob_alloc_payload_t;
 
   typedef struct packed {
@@ -44,12 +52,6 @@ package rv32_ooo_pkg;
     rob_alloc_payload_t payload;
     logic [31:0]        result;
   } rob_entry_t;
-
-  // Rename, scheduling, writeback, and the PRF exchange the same physical
-  // register identifiers through this shared type.
-  localparam int unsigned PHYS_REGS = 64;
-  localparam int unsigned PHYS_REG_INDEX_WIDTH = $clog2(PHYS_REGS);
-  typedef logic [PHYS_REG_INDEX_WIDTH-1:0] phys_reg_idx_t;
 
   localparam int unsigned ISSUE_ENTRIES = 8;
   localparam int unsigned ISSUE_INDEX_WIDTH = $clog2(ISSUE_ENTRIES);
@@ -67,14 +69,20 @@ package rv32_ooo_pkg;
   // Renamed instruction identity shared by Dispatch, scheduling, and Issue.
   // Source readiness remains separate because CDB wakeup changes it in place.
   typedef struct packed {
-    rob_tag_t       rob_tag;
-    phys_reg_idx_t  phys_rs1;
-    phys_reg_idx_t  phys_rs2;
-    phys_reg_idx_t  phys_rd;
-    logic           rs1_used;
-    logic           rs2_used;
-    logic           rd_write;
-    fu_kind_e       fu_kind;
+    logic [31:0]                  pc;
+    logic [31:0]                  instr;
+    logic [31:0]                  imm;
+    rob_tag_t                     rob_tag;
+    phys_reg_idx_t                phys_rs1;
+    phys_reg_idx_t                phys_rs2;
+    phys_reg_idx_t                phys_rd;
+    logic                         rs1_used;
+    logic                         rs2_used;
+    logic                         rd_write;
+    rv32_pkg::alu_op_e            alu_op;
+    rv32_pkg::operand_a_sel_e     operand_a_sel;
+    rv32_pkg::operand_b_sel_e     operand_b_sel;
+    fu_kind_e                     fu_kind;
   } issue_uop_t;
 
 endpackage

@@ -76,12 +76,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class FQ,ROB,PRF,RAT,FL,IQ partial
-    class L2,RENAME,COMPLETE planned
+    class FQ,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE partial
+    class L2 planned
     class MEM external
 ```
 
-Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the frontend Fetch Queue, ROB, physical register file, RAT/RRAT mapping tables, recoverable physical-register free list, and Issue Queue. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
+Green nodes identify implemented capabilities, including both pipeline-integrated L1 caches. Amber identifies tested standalone OoO foundations: the frontend Fetch Queue, ROB, physical register file, RAT/RRAT mapping tables, recoverable physical-register free list, Issue Queue, atomic Rename/Dispatch controller, integer Issue Stage, and registered Completion Buffer. Their integration into an OoO core remains planned. Gray nodes are planned structures, while blue identifies the external memory environment. Green does not imply that a block has already been integrated into every core.
 
 The design is organized around three independently testable cores:
 
@@ -139,7 +139,7 @@ scripts/             build, regression, synthesis, and result-processing scripts
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order foundation now includes a tested single-request instruction frontend, eight-entry Fetch Queue, 16-entry ROB, 64-entry physical register file, speculative/committed rename maps, recoverable physical-register free list, and eight-entry Issue Queue; the integrated out-of-order core remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The out-of-order foundation now includes a tested instruction frontend, Fetch Queue, ROB, physical register file, speculative/committed rename maps, recoverable physical-register free list, Issue Queue, atomic Rename/Dispatch controller, integer Issue Stage, and registered Completion Buffer; full backend integration remains planned. The unified L2 cache and external-model differential verification also remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -165,6 +165,9 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
 - a 64-entry physical-register free list with lowest-index allocation, speculative and committed availability maps, retirement-based old-mapping release, fixed p0 exclusion, exhaustion backpressure, and recovery that includes same-cycle retirement;
 - an eight-entry, single-dispatch, single-issue queue with physical-tag wakeup, same-cycle Dispatch/CDB handling, functional-unit backpressure, deterministic lowest-slot selection, simultaneous Dispatch/Issue occupancy handling, and recovery Flush;
+- an atomic single-instruction Rename/Dispatch controller that allocates ROB and Issue Queue entries together with optional Free List, RAT, and PRF destination updates;
+- a combinational integer Issue Stage with physical-register addressing, register/PC/zero/immediate operand selection, ALU execution, and completion backpressure;
+- a one-entry registered Completion Buffer with CDB backpressure, stable payload retention, recovery Flush, and bubble-free consume-and-replace throughput;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, and pipeline regressions covering stage movement, stalls, forwarding, control flow, memory operations, RV32M, traps, and reset behavior.
@@ -235,6 +238,8 @@ Run the standalone out-of-order frontend and backend structure regressions with:
 ```bash
 make CAD_ENV=/path/to/env.sh test-fetch-queue
 make CAD_ENV=/path/to/env.sh test-ooo-frontend
+make CAD_ENV=/path/to/env.sh test-rename-dispatch
+make CAD_ENV=/path/to/env.sh test-ooo-execute
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
@@ -321,12 +326,12 @@ flowchart LR
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
     class PC,FETCH,L1I,L1D,DECODE,ALU,MULDIV,LSU,COMMIT,ARF implemented
-    class FQ,ROB,PRF,RAT,FL,IQ partial
-    class L2,RENAME,COMPLETE planned
+    class FQ,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE partial
+    class L2 planned
     class MEM external
 ```
 
-绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即前端 Fetch Queue、ROB、物理寄存器文件、RAT/RRAT 映射表、支持恢复的物理寄存器 Free List 和 Issue Queue，其与 OoO core 的集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
+绿色节点表示已经实现的能力，包括已经与 pipeline 集成的两个分离 L1 cache；黄色节点表示已经独立测试的 OoO 基础结构，即前端 Fetch Queue、ROB、物理寄存器文件、RAT/RRAT 映射表、支持恢复的物理寄存器 Free List、Issue Queue、原子 Rename/Dispatch 控制器、整数 Issue Stage 和寄存式 Completion Buffer，其与 OoO core 的完整集成仍待开发；灰色节点表示计划中的结构；蓝色节点表示外部 memory 环境。绿色不代表该模块已经集成进每一种 core。
 
 项目按三种可以独立测试的处理器实现组织：
 
@@ -383,7 +388,7 @@ scripts/             构建、回归、综合和结果处理脚本
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序执行基础结构已经实现并验证单请求取指前端、一个 8-entry Fetch Queue、一个 16-entry ROB、一个 64-entry 物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List 和一个 8-entry Issue Queue；完整乱序核仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。乱序执行基础结构已经实现并验证取指前端、Fetch Queue、ROB、物理寄存器文件、推测/已提交重命名映射表、支持恢复的物理寄存器 Free List、Issue Queue、原子 Rename/Dispatch 控制器、整数 Issue Stage 和寄存式 Completion Buffer；后端完整集成仍属于后续计划。Unified L2 cache 和外部模型差分验证也仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -408,6 +413,9 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
 - 64-entry 物理寄存器 Free List，支持最低编号优先分配、推测/已提交空闲状态、retirement 释放旧映射、固定排除 p0、耗尽 backpressure，以及包含同周期 retirement 的恢复；
 - 8-entry 单 Dispatch、单 Issue 调度队列，支持物理 tag 唤醒、同周期 Dispatch/CDB 处理、功能单元 backpressure、确定性的最低槽位选择、同周期 Dispatch/Issue occupancy 更新和 recovery Flush；
+- 原子单指令 Rename/Dispatch 控制器，将 ROB 和 Issue Queue 分配与可选的 Free List、RAT 和 PRF 目标更新绑定为同一事务；
+- 组合逻辑整数 Issue Stage，支持物理寄存器寻址、register/PC/zero/immediate 操作数选择、ALU 执行和 completion backpressure；
+- 单项寄存式 Completion Buffer，支持 CDB backpressure、payload 稳定保持、recovery Flush 和无气泡 consume-and-replace 吞吐；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖 stage movement、stall、forwarding、control flow、memory、RV32M、trap 和 reset behavior 的 unit、reference-core 与 pipeline directed regression。
@@ -478,6 +486,8 @@ make CAD_ENV=/path/to/env.sh test-dcache
 ```bash
 make CAD_ENV=/path/to/env.sh test-fetch-queue
 make CAD_ENV=/path/to/env.sh test-ooo-frontend
+make CAD_ENV=/path/to/env.sh test-rename-dispatch
+make CAD_ENV=/path/to/env.sh test-ooo-execute
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
