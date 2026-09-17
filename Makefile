@@ -62,6 +62,22 @@ OOO_COMPLETION_BUFFER_SRCS := \
 	rtl/backend/rv32_completion_buffer.sv \
 	tb/unit/rv32_completion_buffer_tb.sv
 
+OOO_INTEGER_TEST := $(BUILD_DIR)/rv32_ooo_integer_tb
+OOO_INTEGER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_phys_regfile.sv \
+	rtl/backend/rv32_rename_map.sv \
+	rtl/backend/rv32_free_list.sv \
+	rtl/backend/rv32_rob.sv \
+	rtl/backend/rv32_issue_queue.sv \
+	rtl/backend/rv32_rename_dispatch.sv \
+	rtl/backend/rv32_issue_stage.sv \
+	rtl/backend/rv32_completion_buffer.sv \
+	rtl/backend/rv32_ooo_backend.sv \
+	tb/core/rv32_ooo_integer_tb.sv
+
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -378,8 +394,9 @@ DCACHE_SRCS := \
 .PHONY: compile-core-differential test-core-differential
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
+.PHONY: compile-ooo-integer test-ooo-integer
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-ooo-integer test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -439,6 +456,17 @@ $(OOO_COMPLETION_BUFFER_TEST): $(OOO_COMPLETION_BUFFER_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_completion_buffer_tb -o $@ $(OOO_COMPLETION_BUFFER_SRCS)'
+
+# Compile or run the integrated integer OoO backend regression.
+compile-ooo-integer: $(OOO_INTEGER_TEST)
+
+test-ooo-integer: $(OOO_INTEGER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_INTEGER_TEST): $(OOO_INTEGER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_integer_tb -o $@ $(OOO_INTEGER_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)

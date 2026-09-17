@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Self-checking unit test for the out-of-order physical register file. The
-// regression covers ready-state allocation, completion writeback, dual-port
-// reads, p0 invariants, and same-register allocation/writeback priority.
+// regression covers ready-state allocation, completion writeback, independent
+// Issue/Rename queries, p0 invariants, and allocation/writeback priority.
 
 `timescale 1ns/1ps
 
@@ -19,6 +19,10 @@ module rv32_phys_regfile_tb;
   phys_reg_idx_t  raddr2;
   logic [31:0]    rdata2;
   logic           rready2;
+  phys_reg_idx_t  rename_raddr1;
+  logic           rename_rready1;
+  phys_reg_idx_t  rename_raddr2;
+  logic           rename_rready2;
   logic           alloc_valid;
   phys_reg_idx_t  alloc_addr;
   logic           wb_valid;
@@ -34,6 +38,10 @@ module rv32_phys_regfile_tb;
     .raddr2_i(raddr2),
     .rdata2_o(rdata2),
     .rready2_o(rready2),
+    .rename_raddr1_i(rename_raddr1),
+    .rename_rready1_o(rename_rready1),
+    .rename_raddr2_i(rename_raddr2),
+    .rename_rready2_o(rename_rready2),
     .alloc_valid_i(alloc_valid),
     .alloc_addr_i(alloc_addr),
     .wb_valid_i(wb_valid),
@@ -94,6 +102,28 @@ module rv32_phys_regfile_tb;
     end
   endtask
 
+  task automatic check_rename_ready(
+    input string test_name,
+    input phys_reg_idx_t addr1,
+    input logic expected_ready1,
+    input phys_reg_idx_t addr2,
+    input logic expected_ready2
+  );
+    begin
+      rename_raddr1 = addr1;
+      rename_raddr2 = addr2;
+      #1;
+      if (rename_rready1 !== expected_ready1) begin
+        $display("%s: ERROR - rename port 1 ready=%0b, expected %0b", test_name, rename_rready1, expected_ready1);
+        errors++;
+      end
+      if (rename_rready2 !== expected_ready2) begin
+        $display("%s: ERROR - rename port 2 ready=%0b, expected %0b", test_name, rename_rready2, expected_ready2);
+        errors++;
+      end
+    end
+  endtask
+
   task automatic allocate_reg(
     input phys_reg_idx_t addr
   );
@@ -133,6 +163,8 @@ module rv32_phys_regfile_tb;
     rst = 1'b0;
     raddr1 = '0;
     raddr2 = '0;
+    rename_raddr1 = '0;
+    rename_raddr2 = '0;
     alloc_valid = 1'b0;
     alloc_addr = '0;
     wb_valid = 1'b0;
@@ -151,6 +183,13 @@ module rv32_phys_regfile_tb;
     check_dual("writeback reg 5", phys_reg_idx_t'(5), 32'h11aa, 1'b1, phys_reg_idx_t'(17), 32'b0, 1'b0);
     writeback_reg(phys_reg_idx_t'(17), 32'h22bb);
     check_dual("writeback reg 17", phys_reg_idx_t'(5), 32'h11aa, 1'b1, phys_reg_idx_t'(17), 32'h22bb, 1'b1);
+
+    check_rename_ready("rename lookup before allocation", phys_reg_idx_t'(32), 1'b1, phys_reg_idx_t'(33), 1'b1);
+    allocate_reg(phys_reg_idx_t'(32));
+    check_rename_ready("rename lookup after allocation", phys_reg_idx_t'(32), 1'b0, phys_reg_idx_t'(33), 1'b1);
+    check_dual("data ports independent from rename lookup", phys_reg_idx_t'(5), 32'h11aa, 1'b1, phys_reg_idx_t'(17), 32'h22bb, 1'b1);
+    writeback_reg(phys_reg_idx_t'(32), 32'h33cc);
+    check_rename_ready("rename lookup after writeback", phys_reg_idx_t'(32), 1'b1, phys_reg_idx_t'(0), 1'b1);
 
     // Neither allocation nor writeback may alter the hardwired p0 behavior.
     allocate_reg(phys_reg_idx_t'(0));

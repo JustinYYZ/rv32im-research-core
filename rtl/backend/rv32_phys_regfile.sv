@@ -21,6 +21,12 @@ module rv32_phys_regfile
   output logic [31:0]     rdata2_o,
   output logic            rready2_o,
 
+  // Ready-only ports allow Rename to query mappings while Issue reads data.
+  input  phys_reg_idx_t   rename_raddr1_i,
+  output logic            rename_rready1_o,
+  input  phys_reg_idx_t   rename_raddr2_i,
+  output logic            rename_rready2_o,
+
   // Rename invalidates a newly allocated destination until execution completes.
   input  logic            alloc_valid_i,
   input  phys_reg_idx_t   alloc_addr_i,
@@ -59,5 +65,8 @@ module rv32_phys_regfile
   assign rready1_o = (raddr1_i == '0) ? 1'b1 : ready_q[raddr1_i];
   assign rdata2_o = (raddr2_i == '0) ? 32'b0 : data_q[raddr2_i];
   assign rready2_o = (raddr2_i == '0) ? 1'b1 : ready_q[raddr2_i];
+
+  assign rename_rready1_o = (rename_raddr1_i == '0) ? 1'b1 : ready_q[rename_raddr1_i];
+  assign rename_rready2_o = (rename_raddr2_i == '0) ? 1'b1 : ready_q[rename_raddr2_i];
 
 endmodule
