@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Circular entry store for the first out-of-order ROB milestones.
-//
-// The module tracks allocation order and occupancy while storing each
-// instruction's PC, encoding, architectural destination, and execution result.
-// Results complete by tag and may arrive out of order. A ready/valid interface
-// retires only completed Head entries in program order.
+// Circular reorder buffer with generation-tagged completion. Entries retain
+// instruction identity, rename state, trap/control-flow metadata, execution
+// result, and resolved next PC. Completion may arrive out of order, while the
+// ready/valid retirement interface exposes only a completed Head entry.
 
 `timescale 1ns/1ps
 
@@ -14,6 +12,7 @@ module rv32_rob
 (
     input  logic                       clk_i,
     input  logic                       rst_i,
+    input  logic                       flush_i,
 
     input  logic                       alloc_valid_i,
     input  rob_alloc_payload_t         alloc_payload_i,
@@ -23,6 +22,7 @@ module rv32_rob
     input  logic                       complete_valid_i,
     input  rob_tag_t                   complete_tag_i,
     input  logic [31:0]                complete_result_i,
+    input  logic [31:0]                complete_actual_next_pc_i,
 
     input  logic                       retire_ready_i,
     output logic                       retire_valid_o,
@@ -50,6 +50,7 @@ module rv32_rob
   logic [ROB_ENTRIES-1:0] entry_generation_q;
   rob_alloc_payload_t entry_payload_q [0:ROB_ENTRIES-1];
   logic [31:0] entry_result_q [0:ROB_ENTRIES-1];
+  logic [31:0] entry_actual_next_pc_q [0:ROB_ENTRIES-1];
 
   // Explicit occupancy distinguishes full from empty when the circular head
   // and tail pointers have the same index.
@@ -84,6 +85,7 @@ module rv32_rob
     head_entry_o.generation = entry_generation_q[head_index_q];
     head_entry_o.payload = entry_payload_q[head_index_q];
     head_entry_o.result = entry_result_q[head_index_q];
+    head_entry_o.actual_next_pc = entry_actual_next_pc_q[head_index_q];
   end
 
   always_ff @(posedge clk_i) begin
@@ -95,12 +97,21 @@ module rv32_rob
       count_q <= '0;
       entry_valid_q <= '0;
       entry_completed_q <= '0;
+    end else if (flush_i) begin
+      // Tail already identifies the first slot beyond all speculative entries.
+      // Moving Head to Tail empties the ROB without reusing invalidated tags.
+      head_index_q <= tail_index_q;
+      head_generation_q <= tail_generation_q;
+      count_q <= '0;
+      entry_valid_q <= '0;
+      entry_completed_q <= '0;
     end else begin
       // Completion precedes allocation so a new allocation wins if both target
       // the same physical slot on one edge.
       if (complete_match) begin
         entry_completed_q[complete_tag_i.index] <= 1'b1;
         entry_result_q[complete_tag_i.index] <= complete_result_i;
+        entry_actual_next_pc_q[complete_tag_i.index] <= complete_actual_next_pc_i;
       end
 
       // Allocation advances the tail and changes generation on wraparound.
@@ -110,6 +121,7 @@ module rv32_rob
         entry_generation_q[tail_index_q] <= tail_generation_q;
         entry_payload_q[tail_index_q] <= alloc_payload_i;
         entry_result_q[tail_index_q] <= '0;
+        entry_actual_next_pc_q[tail_index_q] <= '0;
         if (tail_index_q == ROB_INDEX_WIDTH'(ROB_ENTRIES - 1)) begin
           tail_index_q <= '0;
           tail_generation_q <= ~tail_generation_q;

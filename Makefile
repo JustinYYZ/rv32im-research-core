@@ -28,6 +28,7 @@ REGFILE_SRCS := \
 FETCH_QUEUE_TEST := $(BUILD_DIR)/rv32_fetch_queue_tb
 FETCH_QUEUE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/frontend/rv32_fetch_queue.sv \
 	tb/unit/rv32_fetch_queue_tb.sv
@@ -35,6 +36,7 @@ FETCH_QUEUE_SRCS := \
 OOO_FRONTEND_TEST := $(BUILD_DIR)/rv32_ooo_frontend_tb
 OOO_FRONTEND_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/frontend/rv32_fetch_queue.sv \
 	rtl/frontend/rv32_ooo_frontend.sv \
@@ -43,6 +45,7 @@ OOO_FRONTEND_SRCS := \
 RENAME_DISPATCH_TEST := $(BUILD_DIR)/rv32_rename_dispatch_tb
 RENAME_DISPATCH_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rename_dispatch.sv \
 	tb/unit/rv32_rename_dispatch_tb.sv
@@ -50,14 +53,17 @@ RENAME_DISPATCH_SRCS := \
 OOO_ISSUE_STAGE_TEST := $(BUILD_DIR)/rv32_issue_stage_tb
 OOO_ISSUE_STAGE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
 	rtl/backend/rv32_issue_stage.sv \
 	tb/unit/rv32_issue_stage_tb.sv
 
 OOO_COMPLETION_BUFFER_TEST := $(BUILD_DIR)/rv32_completion_buffer_tb
 OOO_COMPLETION_BUFFER_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_completion_buffer.sv \
 	tb/unit/rv32_completion_buffer_tb.sv
@@ -65,8 +71,10 @@ OOO_COMPLETION_BUFFER_SRCS := \
 OOO_INTEGER_TEST := $(BUILD_DIR)/rv32_ooo_integer_tb
 OOO_INTEGER_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
 	rtl/backend/rv32_phys_regfile.sv \
 	rtl/backend/rv32_rename_map.sv \
 	rtl/backend/rv32_free_list.sv \
@@ -78,9 +86,33 @@ OOO_INTEGER_SRCS := \
 	rtl/backend/rv32_ooo_backend.sv \
 	tb/core/rv32_ooo_integer_tb.sv
 
+OOO_CORE_TEST := $(BUILD_DIR)/rv32_ooo_core_tb
+OOO_CORE_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/frontend/rv32_fetch_queue.sv \
+	rtl/frontend/rv32_ooo_frontend.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_phys_regfile.sv \
+	rtl/backend/rv32_rename_map.sv \
+	rtl/backend/rv32_free_list.sv \
+	rtl/backend/rv32_rob.sv \
+	rtl/backend/rv32_issue_queue.sv \
+	rtl/backend/rv32_rename_dispatch.sv \
+	rtl/backend/rv32_issue_stage.sv \
+	rtl/backend/rv32_completion_buffer.sv \
+	rtl/backend/rv32_ooo_backend.sv \
+	rtl/core/rv32_ooo_core.sv \
+	tb/core/rv32_ooo_core_tb.sv
+
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_phys_regfile.sv \
 	tb/unit/rv32_phys_regfile_tb.sv
@@ -88,6 +120,7 @@ PHYS_REGFILE_SRCS := \
 RENAME_MAP_TEST := $(BUILD_DIR)/rv32_rename_map_tb
 RENAME_MAP_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rename_map.sv \
 	tb/unit/rv32_rename_map_tb.sv
@@ -95,6 +128,7 @@ RENAME_MAP_SRCS := \
 FREE_LIST_TEST := $(BUILD_DIR)/rv32_free_list_tb
 FREE_LIST_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_free_list.sv \
 	tb/unit/rv32_free_list_tb.sv
@@ -102,6 +136,7 @@ FREE_LIST_SRCS := \
 ISSUE_QUEUE_TEST := $(BUILD_DIR)/rv32_issue_queue_tb
 ISSUE_QUEUE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_issue_queue.sv \
 	tb/unit/rv32_issue_queue_tb.sv
@@ -109,6 +144,7 @@ ISSUE_QUEUE_SRCS := \
 ROB_TEST := $(BUILD_DIR)/rv32_rob_tb
 ROB_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rob.sv \
 	tb/unit/rv32_rob_tb.sv
@@ -116,6 +152,7 @@ ROB_SRCS := \
 ROB_STORAGE_TEST := $(BUILD_DIR)/rv32_rob_storage_tb
 ROB_STORAGE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rob.sv \
 	tb/unit/rv32_rob_storage_tb.sv
@@ -123,6 +160,7 @@ ROB_STORAGE_SRCS := \
 ROB_COMPLETION_TEST := $(BUILD_DIR)/rv32_rob_completion_tb
 ROB_COMPLETION_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rob.sv \
 	tb/unit/rv32_rob_completion_tb.sv
@@ -130,6 +168,7 @@ ROB_COMPLETION_SRCS := \
 ROB_RETIREMENT_TEST := $(BUILD_DIR)/rv32_rob_retirement_tb
 ROB_RETIREMENT_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
 	rtl/pkg/rv32_ooo_pkg.sv \
 	rtl/backend/rv32_rob.sv \
 	tb/unit/rv32_rob_retirement_tb.sv
@@ -394,9 +433,9 @@ DCACHE_SRCS := \
 .PHONY: compile-core-differential test-core-differential
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
-.PHONY: compile-ooo-integer test-ooo-integer
+.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-ooo-integer test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -467,6 +506,17 @@ $(OOO_INTEGER_TEST): $(OOO_INTEGER_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_integer_tb -o $@ $(OOO_INTEGER_SRCS)'
+
+# Compile or run the O4 frontend/decode/integer-backend core regression.
+compile-ooo-core: $(OOO_CORE_TEST)
+
+test-ooo-core: $(OOO_CORE_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_CORE_TEST): $(OOO_CORE_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_core_tb -o $@ $(OOO_CORE_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)

@@ -37,12 +37,16 @@ package rv32_ooo_pkg;
   typedef logic [PHYS_REG_INDEX_WIDTH-1:0] phys_reg_idx_t;
 
   typedef struct packed {
-    logic [31:0]   pc;
-    logic [31:0]   instr;
-    logic [4:0]    rd;
-    logic          reg_write;
-    phys_reg_idx_t new_phys_rd;
-    phys_reg_idx_t old_phys_rd;
+    logic [31:0]                pc;
+    logic [31:0]                instr;
+    logic [31:0]                predicted_next_pc;
+    rv32_pkg::control_flow_e    control_flow;
+    logic                       trap;
+    rv32_core_pkg::trap_cause_e trap_cause;
+    logic [4:0]                 rd;
+    logic                       reg_write;
+    phys_reg_idx_t              new_phys_rd;
+    phys_reg_idx_t              old_phys_rd;
   } rob_alloc_payload_t;
 
   typedef struct packed {
@@ -51,6 +55,7 @@ package rv32_ooo_pkg;
     logic               generation;
     rob_alloc_payload_t payload;
     logic [31:0]        result;
+    logic [31:0]        actual_next_pc;
   } rob_entry_t;
 
   localparam int unsigned ISSUE_ENTRIES = 8;
@@ -80,6 +85,8 @@ package rv32_ooo_pkg;
     logic                         rs2_used;
     logic                         rd_write;
     rv32_pkg::alu_op_e            alu_op;
+    rv32_pkg::branch_op_e         branch_op;
+    rv32_pkg::control_flow_e      control_flow;
     rv32_pkg::operand_a_sel_e     operand_a_sel;
     rv32_pkg::operand_b_sel_e     operand_b_sel;
     fu_kind_e                     fu_kind;

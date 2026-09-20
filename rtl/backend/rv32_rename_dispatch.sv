@@ -21,8 +21,12 @@ module rv32_rename_dispatch
   input  logic                         decode_rs1_used_i,
   input  logic                         decode_rs2_used_i,
   input  logic                         decode_reg_write_i,
+  input  logic                         decode_trap_i,
+  input  rv32_core_pkg::trap_cause_e   decode_trap_cause_i,
   input  logic [31:0]                  decode_imm_i,
   input  rv32_pkg::alu_op_e            decode_alu_op_i,
+  input  rv32_pkg::branch_op_e         decode_branch_op_i,
+  input  rv32_pkg::control_flow_e      decode_control_flow_i,
   input  rv32_pkg::operand_a_sel_e     decode_operand_a_sel_i,
   input  rv32_pkg::operand_b_sel_e     decode_operand_b_sel_i,
 
@@ -59,7 +63,7 @@ module rv32_rename_dispatch
   // Writes to x0 and instructions without register writeback do not consume a
   // physical destination.
   logic destination_required;
-  assign destination_required = decode_reg_write_i && (decode_rd_i != 5'd0);
+  assign destination_required = decode_reg_write_i && !decode_trap_i && (decode_rd_i != 5'd0);
 
   // Dispatch is atomic across the ROB, Issue Queue, and optional physical-register
   // allocation. Every state-changing valid derives from the same accepted input.
@@ -73,6 +77,10 @@ module rv32_rename_dispatch
   assign rob_alloc_valid_o = dispatch_fire_o;
   assign rob_alloc_payload_o.pc = decode_entry_i.pc;
   assign rob_alloc_payload_o.instr = decode_entry_i.instr;
+  assign rob_alloc_payload_o.predicted_next_pc = decode_entry_i.predicted_next_pc;
+  assign rob_alloc_payload_o.control_flow = decode_trap_i ? rv32_pkg::CF_NONE : decode_control_flow_i;
+  assign rob_alloc_payload_o.trap = decode_trap_i;
+  assign rob_alloc_payload_o.trap_cause = decode_trap_cause_i;
   assign rob_alloc_payload_o.rd = decode_rd_i;
   assign rob_alloc_payload_o.reg_write = destination_required;
   assign rob_alloc_payload_o.new_phys_rd = destination_required ? free_alloc_phys_rd_i : '0;
@@ -86,15 +94,17 @@ module rv32_rename_dispatch
   assign issue_dispatch_uop_o.phys_rs1 = map_phys_rs1_i;
   assign issue_dispatch_uop_o.phys_rs2 = map_phys_rs2_i;
   assign issue_dispatch_uop_o.phys_rd = destination_required ? free_alloc_phys_rd_i : '0;
-  assign issue_dispatch_uop_o.rs1_used = decode_rs1_used_i;
-  assign issue_dispatch_uop_o.rs2_used = decode_rs2_used_i;
+  assign issue_dispatch_uop_o.rs1_used = !decode_trap_i && decode_rs1_used_i;
+  assign issue_dispatch_uop_o.rs2_used = !decode_trap_i && decode_rs2_used_i;
   assign issue_dispatch_uop_o.rd_write = destination_required;
   assign issue_dispatch_uop_o.alu_op = decode_alu_op_i;
+  assign issue_dispatch_uop_o.branch_op = decode_branch_op_i;
+  assign issue_dispatch_uop_o.control_flow = decode_trap_i ? rv32_pkg::CF_NONE : decode_control_flow_i;
   assign issue_dispatch_uop_o.operand_a_sel = decode_operand_a_sel_i;
   assign issue_dispatch_uop_o.operand_b_sel = decode_operand_b_sel_i;
-  assign issue_dispatch_uop_o.fu_kind = FU_ALU;
-  assign issue_dispatch_rs1_ready_o = !decode_rs1_used_i || prf_rs1_ready_i;
-  assign issue_dispatch_rs2_ready_o = !decode_rs2_used_i || prf_rs2_ready_i;
+  assign issue_dispatch_uop_o.fu_kind = (!decode_trap_i && decode_control_flow_i != rv32_pkg::CF_NONE) ? FU_BRANCH : FU_ALU;
+  assign issue_dispatch_rs1_ready_o = decode_trap_i || !decode_rs1_used_i || prf_rs1_ready_i;
+  assign issue_dispatch_rs2_ready_o = decode_trap_i || !decode_rs2_used_i || prf_rs2_ready_i;
 
   assign prf_alloc_valid_o = dispatch_fire_o && destination_required;
   assign prf_alloc_addr_o = destination_required ? free_alloc_phys_rd_i : '0;

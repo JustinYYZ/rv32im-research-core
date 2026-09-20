@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Integer out-of-order backend integration. The first version accepts one
-// decoded instruction per cycle and connects rename, scheduling, execution,
-// completion, and in-order retirement. Control flow, memory, and RV32M are
-// added in later stages.
+// Single-dispatch, single-issue integer out-of-order backend. It connects
+// rename, dynamic scheduling, ALU/control-flow execution, completion, ordered
+// retirement, misprediction recovery, and precise trap recovery. Memory and
+// RV32M functional units are added in later stages.
 
 `timescale 1ns/1ps
 
@@ -23,8 +23,12 @@ module rv32_ooo_backend
   input  logic                         decode_rs1_used_i,
   input  logic                         decode_rs2_used_i,
   input  logic                         decode_reg_write_i,
+  input  logic                         decode_trap_i,
+  input  rv32_core_pkg::trap_cause_e   decode_trap_cause_i,
   input  logic [31:0]                  decode_imm_i,
   input  rv32_pkg::alu_op_e            decode_alu_op_i,
+  input  rv32_pkg::branch_op_e         decode_branch_op_i,
+  input  rv32_pkg::control_flow_e      decode_control_flow_i,
   input  rv32_pkg::operand_a_sel_e     decode_operand_a_sel_i,
   input  rv32_pkg::operand_b_sel_e     decode_operand_b_sel_i,
 
@@ -34,7 +38,12 @@ module rv32_ooo_backend
   output logic [31:0]                  commit_instr_o,
   output logic [4:0]                   commit_rd_o,
   output logic                         commit_reg_write_o,
-  output logic [31:0]                  commit_result_o
+  output logic [31:0]                  commit_result_o,
+  output logic                         commit_trap_o,
+  output rv32_core_pkg::trap_cause_e   commit_trap_cause_o,
+
+  output logic                         redirect_valid_o,
+  output logic [31:0]                  redirect_pc_o
 );
 
   phys_reg_idx_t map_phys_rs1;
@@ -82,16 +91,21 @@ module rv32_ooo_backend
   phys_reg_idx_t       execute_phys_rd;
   logic                execute_rd_write;
   logic [31:0]         execute_result;
+  logic [31:0]         execute_actual_next_pc;
 
   logic                cdb_valid;
   rob_tag_t            cdb_rob_tag;
   phys_reg_idx_t       cdb_phys_rd;
   logic                cdb_rd_write;
   logic [31:0]         cdb_result;
+  logic [31:0]         cdb_actual_next_pc;
 
   logic                rob_retire_valid;
   rob_entry_t          rob_head_entry;
   logic                commit_fire;
+  logic                trap_commit;
+
+  logic backend_recover;
 
   rv32_rename_map rename_map (
     .clk_i(clk_i),
@@ -107,7 +121,7 @@ module rv32_ooo_backend
     .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write),
     .commit_arch_rd_i(rob_head_entry.payload.rd),
     .commit_phys_rd_i(rob_head_entry.payload.new_phys_rd),
-    .recover_i(recover_i)
+    .recover_i(backend_recover)
   );
 
   rv32_free_list free_list (
@@ -119,7 +133,7 @@ module rv32_ooo_backend
     .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write),
     .commit_new_phys_rd_i(rob_head_entry.payload.new_phys_rd),
     .commit_old_phys_rd_i(rob_head_entry.payload.old_phys_rd),
-    .recover_i(recover_i)
+    .recover_i(backend_recover)
   );
 
   rv32_phys_regfile phys_regfile (
@@ -145,6 +159,7 @@ module rv32_ooo_backend
   rv32_rob rob (
     .clk_i(clk_i),
     .rst_i(rst_i),
+    .flush_i(backend_recover),
 
     .alloc_valid_i(rob_alloc_valid),
     .alloc_payload_i(rob_alloc_payload),
@@ -154,6 +169,7 @@ module rv32_ooo_backend
     .complete_valid_i(cdb_valid),
     .complete_tag_i(cdb_rob_tag),
     .complete_result_i(cdb_result),
+    .complete_actual_next_pc_i(cdb_actual_next_pc),
 
     .retire_ready_i(commit_ready_i && !recover_i),
     .retire_valid_o(rob_retire_valid),
@@ -169,7 +185,7 @@ module rv32_ooo_backend
   rv32_issue_queue issue_queue (
     .clk_i(clk_i),
     .rst_i(rst_i),
-    .flush_i(recover_i),
+    .flush_i(backend_recover),
 
     .dispatch_valid_i(issue_dispatch_valid),
     .dispatch_ready_o(issue_dispatch_ready),
@@ -191,7 +207,7 @@ module rv32_ooo_backend
 
   rv32_rename_dispatch rename_dispatch (
     .rst_i(rst_i),
-    .recover_i(recover_i),
+    .recover_i(backend_recover),
 
     .decode_valid_i(decode_valid_i),
     .decode_ready_o(decode_ready_o),
@@ -202,8 +218,12 @@ module rv32_ooo_backend
     .decode_rs1_used_i(decode_rs1_used_i),
     .decode_rs2_used_i(decode_rs2_used_i),
     .decode_reg_write_i(decode_reg_write_i),
+    .decode_trap_i(decode_trap_i),
+    .decode_trap_cause_i(decode_trap_cause_i),
     .decode_imm_i(decode_imm_i),
     .decode_alu_op_i(decode_alu_op_i),
+    .decode_branch_op_i(decode_branch_op_i),
+    .decode_control_flow_i(decode_control_flow_i),
     .decode_operand_a_sel_i(decode_operand_a_sel_i),
     .decode_operand_b_sel_i(decode_operand_b_sel_i),
 
@@ -239,7 +259,7 @@ module rv32_ooo_backend
 
   rv32_issue_stage issue_stage (
     .rst_i(rst_i),
-    .flush_i(recover_i),
+    .flush_i(backend_recover),
 
     .issue_valid_i(issue_valid),
     .issue_ready_o(issue_ready),
@@ -255,13 +275,14 @@ module rv32_ooo_backend
     .completion_rob_tag_o(execute_rob_tag),
     .completion_phys_rd_o(execute_phys_rd),
     .completion_rd_write_o(execute_rd_write),
-    .completion_result_o(execute_result)
+    .completion_result_o(execute_result),
+    .completion_actual_next_pc_o(execute_actual_next_pc)
   );
 
   rv32_completion_buffer completion_buffer (
     .clk_i(clk_i),
     .rst_i(rst_i),
-    .flush_i(recover_i),
+    .flush_i(backend_recover),
 
     .execute_valid_i(execute_valid),
     .execute_ready_o(execute_ready),
@@ -269,20 +290,23 @@ module rv32_ooo_backend
     .execute_phys_rd_i(execute_phys_rd),
     .execute_rd_write_i(execute_rd_write),
     .execute_result_i(execute_result),
+    .execute_actual_next_pc_i(execute_actual_next_pc),
 
     .cdb_valid_o(cdb_valid),
     .cdb_ready_i(1'b1),
     .cdb_rob_tag_o(cdb_rob_tag),
     .cdb_phys_rd_o(cdb_phys_rd),
     .cdb_rd_write_o(cdb_rd_write),
-    .cdb_result_o(cdb_result)
+    .cdb_result_o(cdb_result),
+    .cdb_actual_next_pc_o(cdb_actual_next_pc)
   );
 
-  // Completion backpressure propagates through the Issue Stage to the Issue
-  // Queue. Only the integer ALU is available in this backend stage.
+  // ALU and branch operations share the current integer Issue Stage and its
+  // completion buffer. Later functional units receive independent buffers.
   always_comb begin
     fu_ready = '0;
     fu_ready[FU_ALU] = issue_ready;
+    fu_ready[FU_BRANCH] = issue_ready;
   end
 
   // Retirement follows ready/valid semantics. RRAT and Free List state changes
@@ -294,5 +318,14 @@ module rv32_ooo_backend
   assign commit_rd_o = commit_valid_o ? rob_head_entry.payload.rd : 5'b0;
   assign commit_reg_write_o = commit_valid_o && rob_head_entry.payload.reg_write;
   assign commit_result_o = commit_valid_o ? rob_head_entry.result : 32'b0;
+  assign commit_trap_o = commit_valid_o && rob_head_entry.payload.trap;
+  assign commit_trap_cause_o = rv32_core_pkg::trap_cause_e'(commit_trap_o ? rob_head_entry.payload.trap_cause : rv32_core_pkg::CORE_TRAP_NONE);
+  assign trap_commit = commit_fire && rob_head_entry.payload.trap;
+  assign redirect_valid_o = commit_fire &&
+                            !rob_head_entry.payload.trap &&
+                            (rob_head_entry.payload.control_flow != rv32_pkg::CF_NONE) &&
+                            (rob_head_entry.actual_next_pc != rob_head_entry.payload.predicted_next_pc);
+  assign redirect_pc_o = redirect_valid_o ? rob_head_entry.actual_next_pc : 32'b0;
+  assign backend_recover = recover_i || redirect_valid_o || trap_commit;
 
 endmodule

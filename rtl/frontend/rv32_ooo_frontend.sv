@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Single-request instruction frontend for the out-of-order core. It tracks the
-// request PC, converts I-cache responses into Fetch Queue entries, and discards
-// wrong-path work after a recovery redirect.
+// request PC, converts I-cache responses into Fetch Queue entries, rejects stale
+// wrong-path responses by epoch, and stops accepting work after sticky halt.
 
 `timescale 1ns/1ps
 
@@ -13,6 +13,7 @@ module rv32_ooo_frontend
 ) (
   input  logic           clk_i,
   input  logic           rst_i,
+  input  logic           halt_i,
 
   input  logic           redirect_valid_i,
   input  logic [31:0]    redirect_pc_i,
@@ -45,10 +46,10 @@ module rv32_ooo_frontend
 
   // A request reserves one Fetch Queue slot until its response returns. Epoch
   // comparison prevents responses from an earlier control-flow path entering the Queue.
-  assign icache_req_valid_o = !rst_i && !redirect_valid_i && !outstanding_q && queue_enq_ready;
+  assign icache_req_valid_o = !rst_i && !halt_i && !redirect_valid_i && !outstanding_q && queue_enq_ready;
   assign icache_req_addr_o = pc_q;
   assign icache_req_fire = icache_req_valid_o && icache_req_ready_i;
-  assign queue_enq_valid = !rst_i && !redirect_valid_i && icache_resp_valid_i && outstanding_q && (request_epoch_q == epoch_q);
+  assign queue_enq_valid = !rst_i && !halt_i && !redirect_valid_i && icache_resp_valid_i && outstanding_q && (request_epoch_q == epoch_q);
 
   always_comb begin
     queue_enq_entry = '0;

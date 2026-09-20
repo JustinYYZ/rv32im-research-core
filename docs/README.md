@@ -9,6 +9,9 @@ independently.
 - [Five-stage pipeline](design/rv32-pipeline-core.md): implemented stage
   payloads, hazard handling, forwarding, blocking operations, precise traps,
   and regression scope.
+- [Out-of-order core](design/rv32-ooo-core.md): current integrated integer and
+  control-flow path, rename/retirement invariants, recovery, precise traps, and
+  remaining integration stages.
 
 ## Verification
 
@@ -34,6 +37,8 @@ Curated, reproducible summaries may be added directly under `docs/results/`.
 
 - [五级流水线](design/rv32-pipeline-core.md)：当前实现的 stage payload、hazard、
   forwarding、blocking operation、精确异常和回归范围。
+- [乱序执行核心](design/rv32-ooo-core.md)：当前已经接通的整数与控制流路径、
+  rename/retirement invariant、恢复、精确异常和后续集成边界。
 
 ## 验证资料
 

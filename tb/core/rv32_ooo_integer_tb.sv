@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Directed integration test for the first integer out-of-order backend. The TB
-// supplies already-decoded ALU instructions so it can isolate rename, issue,
-// completion, and in-order retirement from the future OoO frontend/core top.
+// Directed integration test for the integer out-of-order backend. The TB
+// supplies already-decoded ALU instructions to isolate rename, issue,
+// completion, and in-order retirement from frontend and Decode behavior.
 
 `timescale 1ns/1ps
 
@@ -47,8 +47,12 @@ module rv32_ooo_integer_tb;
     .decode_rs1_used_i(decode_rs1_used),
     .decode_rs2_used_i(decode_rs2_used),
     .decode_reg_write_i(decode_reg_write),
+    .decode_trap_i(1'b0),
+    .decode_trap_cause_i(rv32_core_pkg::CORE_TRAP_NONE),
     .decode_imm_i(decode_imm),
     .decode_alu_op_i(decode_alu_op),
+    .decode_branch_op_i(rv32_pkg::BR_EQ),
+    .decode_control_flow_i(rv32_pkg::CF_NONE),
     .decode_operand_a_sel_i(decode_operand_a_sel),
     .decode_operand_b_sel_i(decode_operand_b_sel),
     .commit_valid_o(commit_valid),

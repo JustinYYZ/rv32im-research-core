@@ -34,12 +34,14 @@ module rv32_completion_buffer_tb;
     .execute_phys_rd_i(execute_phys_rd),
     .execute_rd_write_i(execute_rd_write),
     .execute_result_i(execute_result),
+    .execute_actual_next_pc_i(32'b0),
     .cdb_valid_o(cdb_valid),
     .cdb_ready_i(cdb_ready),
     .cdb_rob_tag_o(cdb_rob_tag),
     .cdb_phys_rd_o(cdb_phys_rd),
     .cdb_rd_write_o(cdb_rd_write),
-    .cdb_result_o(cdb_result)
+    .cdb_result_o(cdb_result),
+    .cdb_actual_next_pc_o()
   );
 
   // Reset and empty-buffer behavior.

@@ -23,6 +23,8 @@ module rv32_rename_dispatch_tb;
   logic                         decode_reg_write;
   logic [31:0]                  decode_imm;
   rv32_pkg::alu_op_e            decode_alu_op;
+  rv32_pkg::branch_op_e         decode_branch_op;
+  rv32_pkg::control_flow_e      decode_control_flow;
   rv32_pkg::operand_a_sel_e     decode_operand_a_sel;
   rv32_pkg::operand_b_sel_e     decode_operand_b_sel;
   phys_reg_idx_t                map_phys_rs1;
@@ -62,8 +64,12 @@ module rv32_rename_dispatch_tb;
     .decode_rs1_used_i(decode_rs1_used),
     .decode_rs2_used_i(decode_rs2_used),
     .decode_reg_write_i(decode_reg_write),
+    .decode_trap_i(1'b0),
+    .decode_trap_cause_i(rv32_core_pkg::CORE_TRAP_NONE),
     .decode_imm_i(decode_imm),
     .decode_alu_op_i(decode_alu_op),
+    .decode_branch_op_i(decode_branch_op),
+    .decode_control_flow_i(decode_control_flow),
     .decode_operand_a_sel_i(decode_operand_a_sel),
     .decode_operand_b_sel_i(decode_operand_b_sel),
     .map_phys_rs1_i(map_phys_rs1),
@@ -106,6 +112,8 @@ module rv32_rename_dispatch_tb;
       decode_reg_write = 1'b0;
       decode_imm = '0;
       decode_alu_op = rv32_pkg::ALU_ADD;
+      decode_branch_op = rv32_pkg::BR_EQ;
+      decode_control_flow = rv32_pkg::CF_NONE;
       decode_operand_a_sel = rv32_pkg::OP_A_RS1;
       decode_operand_b_sel = rv32_pkg::OP_B_RS2;
       map_phys_rs1 = '0;
@@ -210,8 +218,12 @@ module rv32_rename_dispatch_tb;
       expected_rob = '0;
       expected_rob.pc = 32'h8000_0000;
       expected_rob.instr = 32'h0020_82b3;
+      expected_rob.predicted_next_pc = 32'h8000_0004;
+      expected_rob.control_flow = rv32_pkg::CF_NONE;
       expected_rob.rd = 5'd5;
       expected_rob.reg_write = 1'b1;
+      expected_rob.trap = 1'b0;
+      expected_rob.trap_cause = rv32_core_pkg::CORE_TRAP_NONE;
       expected_rob.new_phys_rd = phys_reg_idx_t'(40);
       expected_rob.old_phys_rd = phys_reg_idx_t'(5);
 
@@ -227,6 +239,8 @@ module rv32_rename_dispatch_tb;
       expected_uop.rs2_used = 1'b1;
       expected_uop.rd_write = 1'b1;
       expected_uop.alu_op = rv32_pkg::ALU_ADD;
+      expected_uop.branch_op = rv32_pkg::BR_EQ;
+      expected_uop.control_flow = rv32_pkg::CF_NONE;
       expected_uop.operand_a_sel = rv32_pkg::OP_A_RS1;
       expected_uop.operand_b_sel = rv32_pkg::OP_B_RS2;
       expected_uop.fu_kind = FU_ALU;

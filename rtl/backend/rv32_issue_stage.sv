@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Integer Issue Stage for the first out-of-order execution path. A selected
-// Issue Queue entry addresses the PRF, selects its two ALU operands, and sends
-// the result and destination identities to the completion buffer.
+// Integer and control-flow Issue Stage. A selected Issue Queue entry reads the
+// PRF, selects ALU operands, resolves the actual next PC, and sends result and
+// instruction identity to the completion buffer.
 
 `timescale 1ns/1ps
 
@@ -26,14 +26,18 @@ module rv32_issue_stage
   output rob_tag_t                     completion_rob_tag_o,
   output phys_reg_idx_t                completion_phys_rd_o,
   output logic                         completion_rd_write_o,
-  output logic [31:0]                  completion_result_o
+  output logic [31:0]                  completion_result_o,
+  output logic [31:0]                  completion_actual_next_pc_o
 );
 
   // Operand selectors cover register, immediate, PC, and zero sources used by
-  // the first integer OoO execution path.
+  // integer ALU and control-flow operations.
   logic [31:0] operand_a;
   logic [31:0] operand_b;
   logic [31:0] alu_result;
+  logic        branch_taken;
+  logic [31:0] execution_result;
+  logic [31:0] actual_next_pc;
 
   always_comb begin
     case (issue_uop_i.operand_a_sel)
@@ -56,8 +60,37 @@ module rv32_issue_stage
     .result_o(alu_result)
   );
 
-  // Completion-buffer backpressure prevents Issue Queue removal. Result identity
-  // remains attached to the ALU value so writeback can update the PRF and ROB.
+  rv32_branch_unit branch_unit (
+    .op_i(issue_uop_i.branch_op),
+    .lhs_i(prf_rdata1_i),
+    .rhs_i(prf_rdata2_i),
+    .taken_o(branch_taken)
+  );
+
+  always_comb begin
+    case (issue_uop_i.control_flow)
+      rv32_pkg::CF_BRANCH: begin
+        execution_result = alu_result;
+        actual_next_pc = branch_taken ? alu_result : issue_uop_i.pc + 32'd4;
+      end
+      rv32_pkg::CF_JAL: begin
+        execution_result = issue_uop_i.pc + 32'd4;
+        actual_next_pc = alu_result;
+      end
+      rv32_pkg::CF_JALR: begin
+        execution_result = issue_uop_i.pc + 32'd4;
+        actual_next_pc = alu_result & ~32'd1;
+      end
+      default: begin
+        execution_result = alu_result;
+        actual_next_pc = issue_uop_i.pc + 32'd4;
+      end
+
+    endcase
+  end
+
+  // Completion-buffer backpressure prevents Issue Queue removal. Result and
+  // resolved next-PC metadata remain attached to the same ROB identity.
   assign issue_ready_o = !rst_i && !flush_i && completion_ready_i;
   assign prf_raddr1_o = issue_uop_i.phys_rs1;
   assign prf_raddr2_o = issue_uop_i.phys_rs2;
@@ -65,6 +98,7 @@ module rv32_issue_stage
   assign completion_rob_tag_o = issue_uop_i.rob_tag;
   assign completion_phys_rd_o = issue_uop_i.phys_rd;
   assign completion_rd_write_o = issue_uop_i.rd_write;
-  assign completion_result_o = alu_result;
+  assign completion_result_o = execution_result;
+  assign completion_actual_next_pc_o = actual_next_pc;
 
 endmodule

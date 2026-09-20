@@ -30,6 +30,7 @@ module rv32_ooo_frontend_tb;
   ) dut (
     .clk_i(clk),
     .rst_i(rst),
+    .halt_i(1'b0),
     .redirect_valid_i(redirect_valid),
     .redirect_pc_i(redirect_pc),
     .icache_req_valid_o(icache_req_valid),

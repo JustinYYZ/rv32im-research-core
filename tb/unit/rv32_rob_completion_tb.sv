@@ -41,6 +41,7 @@ module rv32_rob_completion_tb;
   rv32_rob dut (
     .clk_i              (clk),
     .rst_i              (rst),
+    .flush_i            (1'b0),
     .alloc_valid_i      (alloc_valid),
     .alloc_payload_i    (alloc_payload),
     .alloc_ready_o      (alloc_ready),
@@ -48,6 +49,7 @@ module rv32_rob_completion_tb;
     .complete_valid_i   (complete_valid),
     .complete_tag_i     (complete_tag),
     .complete_result_i  (complete_result),
+    .complete_actual_next_pc_i(32'b0),
     .retire_ready_i     (retire_ready),
     .retire_valid_o     (retire_valid),
     .head_valid_o       (head_valid),
