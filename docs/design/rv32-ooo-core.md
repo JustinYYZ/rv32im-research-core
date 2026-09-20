@@ -19,13 +19,14 @@ single-dispatch、single-issue 的整数乱序核心：指令可以按照 operan
 
 以下能力尚未接入 OoO core：
 
-- RV32M multiplier/divider 和多 completion producer 仲裁；
+- RV32M multiplier/divider 和多 completion producer 的 core-level 写回路径；
 - load/store、data-memory interface、L1 data cache 和 memory ordering；
 - OoO core 与 reference core 的 commit-level differential regression；
 - superscalar Dispatch/Issue、advanced branch prediction、LSQ 和 L2 cache。
 
-仓库中的 multiplier、divider、LSU 和 L1 cache 已用于其他 core 或独立测试；它们的存在
-不代表已经接入 OoO core。
+RV32M Dispatch 分类、round-robin CDB arbiter 和带四项 completion queue 的 OoO multiplier
+wrapper 已完成独立验证。仓库中的 divider、LSU 和 L1 cache 也已用于其他 core 或独立测试；
+这些支撑模块的存在不代表相应路径已经接入 `rv32_ooo_core`。
 
 ## 2. 数据流
 
@@ -92,9 +93,11 @@ ROB entry 保存：
 - execution result 和 actual next PC；
 - valid、completed 和 generation 状态。
 
-当前 ALU/branch execution path 后有一个 one-entry completion buffer。它在 CDB 暂时不能
-接受结果时稳定保存 payload，并允许 consume-and-replace。O5 接入 MUL/DIV 后，每个 producer
-需要独立 buffer，再由 CDB arbiter 每周期选择一个 completion。
+当前 ALU/branch execution path 后有一个 one-entry completion buffer。它在写回端暂时不能
+接受结果时稳定保存 payload，并允许 consume-and-replace。独立的 round-robin CDB arbiter
+已经能够在 ALU、MUL 和 DIV 三个 producer 之间每周期选择一个 completion；OoO multiplier
+wrapper 使用四项 credit 和 completion queue 对齐 metadata、吸收 CDB backpressure，并在
+recovery 时清除在途结果。这两个模块尚未连接到当前 backend/core。
 
 ## 5. Control-flow Recovery
 
@@ -150,12 +153,14 @@ instruction request、Fetch Queue enqueue 和 Decode handshake。
 - ECALL precise Commit、trap cause、年轻状态清除和 sticky halt。
 
 Fetch Queue、frontend epoch、decoder、branch unit、ROB、rename structures 和 Issue Queue 另有
-独立 regression。当前 core-level test 没有穷举所有 Branch/JAL/JALR 和 trap encoding；这些
+独立 regression。CDB arbiter regression 验证 single-winner backpressure 和 round-robin 公平性；
+OoO multiplier regression 验证固定延迟 metadata 对齐、连续四请求、completion backpressure
+和 recovery Flush。当前 core-level test 没有穷举所有 Branch/JAL/JALR 和 trap encoding；这些
 路径在接入 O5/O6 后还需要通过 commit-level differential test 扩大覆盖范围。
 
 ## 8. Next Integration Stages
 
-1. O5：为 ALU、MUL 和 DIV 建立独立 completion buffer，加入 CDB arbitration；
+1. O5：补齐 divider producer，并把现有 multiplier producer 和 CDB arbiter 接入 backend/core；
 2. O6：先实现 ROB-Head-only memory execution，再连接现有 L1 cache；
 3. O7：让 OoO core 与 reference core 使用独立 memory image，按 Commit 顺序差分；
 4. 在稳定 baseline 上研究 early load、LSQ 和 store-to-load forwarding。
