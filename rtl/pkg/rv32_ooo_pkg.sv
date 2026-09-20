@@ -58,6 +58,16 @@ package rv32_ooo_pkg;
     logic [31:0]        actual_next_pc;
   } rob_entry_t;
 
+  // A completed instruction keeps its ROB and physical-register identities
+  // attached to the value while it waits for the shared CDB.
+  typedef struct packed {
+    rob_tag_t      rob_tag;
+    phys_reg_idx_t phys_rd;
+    logic          rd_write;
+    logic [31:0]   result;
+    logic [31:0]   actual_next_pc;
+  } completion_payload_t;
+
   localparam int unsigned ISSUE_ENTRIES = 8;
   localparam int unsigned ISSUE_INDEX_WIDTH = $clog2(ISSUE_ENTRIES);
   localparam int unsigned ISSUE_COUNT_WIDTH = $clog2(ISSUE_ENTRIES + 1);

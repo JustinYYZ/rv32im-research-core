@@ -68,6 +68,14 @@ OOO_COMPLETION_BUFFER_SRCS := \
 	rtl/backend/rv32_completion_buffer.sv \
 	tb/unit/rv32_completion_buffer_tb.sv
 
+CDB_ARBITER_TEST := $(BUILD_DIR)/rv32_cdb_arbiter_tb
+CDB_ARBITER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_cdb_arbiter.sv \
+	tb/unit/rv32_cdb_arbiter_tb.sv
+
 OOO_INTEGER_TEST := $(BUILD_DIR)/rv32_ooo_integer_tb
 OOO_INTEGER_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -423,10 +431,12 @@ DCACHE_SRCS := \
 	rtl/cache/rv32_dcache.sv \
 	tb/cache/rv32_dcache_tb.sv
 
-.PHONY: test test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
+.PHONY: test test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-hazard-unit test-forwarding-unit test-lsu \
 	test-multiplier test-divider check-decoder lint-decoder synth-decoder \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
+
+.PHONY: compile-cdb-arbiter
 
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
 .PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
@@ -435,7 +445,7 @@ DCACHE_SRCS := \
 .PHONY: compile-dcache test-dcache
 .PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -495,6 +505,16 @@ $(OOO_COMPLETION_BUFFER_TEST): $(OOO_COMPLETION_BUFFER_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_completion_buffer_tb -o $@ $(OOO_COMPLETION_BUFFER_SRCS)'
+
+compile-cdb-arbiter: $(CDB_ARBITER_TEST)
+
+test-cdb-arbiter: $(CDB_ARBITER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(CDB_ARBITER_TEST): $(CDB_ARBITER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_cdb_arbiter_tb -o $@ $(CDB_ARBITER_SRCS)'
 
 # Compile or run the integrated integer OoO backend regression.
 compile-ooo-integer: $(OOO_INTEGER_TEST)
