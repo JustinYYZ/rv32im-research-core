@@ -85,6 +85,9 @@ package rv32_ooo_pkg;
     logic                         rs2_used;
     logic                         rd_write;
     rv32_pkg::alu_op_e            alu_op;
+    // The decoded RV32M operation travels with the renamed instruction so the
+    // selected MUL/DIV unit knows which architectural result to produce.
+    rv32_pkg::muldiv_op_e         muldiv_op;
     rv32_pkg::branch_op_e         branch_op;
     rv32_pkg::control_flow_e      control_flow;
     rv32_pkg::operand_a_sel_e     operand_a_sel;

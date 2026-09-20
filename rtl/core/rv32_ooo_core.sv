@@ -169,6 +169,7 @@ module rv32_ooo_core #(
     .decode_trap_cause_i(decoder_trap_cause),
     .decode_imm_i(decoder_imm),
     .decode_alu_op_i(decoder_alu_op),
+    .decode_muldiv_op_i(decoder_muldiv_op),
     .decode_branch_op_i(decoder_branch_op),
     .decode_control_flow_i(decoder_control_flow),
     .decode_operand_a_sel_i(decoder_operand_a_sel),
@@ -210,6 +211,8 @@ module rv32_ooo_core #(
 
   assign frontend_redirect_valid = redirect_valid || commit_trap_o;
 
+  // Keep RV32M blocked until O5E connects real execution and completion paths.
+  // O5A only transports and classifies its control metadata.
   assign integer_supported = !fetch_entry.access_fault &&
                              !decoder_illegal &&
                              decoder_mem_op == rv32_pkg::MEM_NONE &&

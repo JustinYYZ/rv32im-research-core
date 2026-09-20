@@ -51,6 +51,7 @@ module rv32_ooo_integer_tb;
     .decode_trap_cause_i(rv32_core_pkg::CORE_TRAP_NONE),
     .decode_imm_i(decode_imm),
     .decode_alu_op_i(decode_alu_op),
+    .decode_muldiv_op_i(rv32_pkg::MD_NONE),
     .decode_branch_op_i(rv32_pkg::BR_EQ),
     .decode_control_flow_i(rv32_pkg::CF_NONE),
     .decode_operand_a_sel_i(decode_operand_a_sel),

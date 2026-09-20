@@ -23,6 +23,7 @@ module rv32_rename_dispatch_tb;
   logic                         decode_reg_write;
   logic [31:0]                  decode_imm;
   rv32_pkg::alu_op_e            decode_alu_op;
+  rv32_pkg::muldiv_op_e         decode_muldiv_op;
   rv32_pkg::branch_op_e         decode_branch_op;
   rv32_pkg::control_flow_e      decode_control_flow;
   rv32_pkg::operand_a_sel_e     decode_operand_a_sel;
@@ -68,6 +69,7 @@ module rv32_rename_dispatch_tb;
     .decode_trap_cause_i(rv32_core_pkg::CORE_TRAP_NONE),
     .decode_imm_i(decode_imm),
     .decode_alu_op_i(decode_alu_op),
+    .decode_muldiv_op_i(decode_muldiv_op),
     .decode_branch_op_i(decode_branch_op),
     .decode_control_flow_i(decode_control_flow),
     .decode_operand_a_sel_i(decode_operand_a_sel),
@@ -112,6 +114,7 @@ module rv32_rename_dispatch_tb;
       decode_reg_write = 1'b0;
       decode_imm = '0;
       decode_alu_op = rv32_pkg::ALU_ADD;
+      decode_muldiv_op = rv32_pkg::MD_NONE;
       decode_branch_op = rv32_pkg::BR_EQ;
       decode_control_flow = rv32_pkg::CF_NONE;
       decode_operand_a_sel = rv32_pkg::OP_A_RS1;
@@ -239,6 +242,7 @@ module rv32_rename_dispatch_tb;
       expected_uop.rs2_used = 1'b1;
       expected_uop.rd_write = 1'b1;
       expected_uop.alu_op = rv32_pkg::ALU_ADD;
+      expected_uop.muldiv_op = rv32_pkg::MD_NONE;
       expected_uop.branch_op = rv32_pkg::BR_EQ;
       expected_uop.control_flow = rv32_pkg::CF_NONE;
       expected_uop.operand_a_sel = rv32_pkg::OP_A_RS1;
@@ -376,6 +380,39 @@ module rv32_rename_dispatch_tb;
     end
   endtask
 
+  // Representative MUL and DIV operations verify metadata transport and FU
+  // classification; decoder tests already cover all eight instruction encodings.
+  task automatic test_muldiv_routing(
+    input rv32_pkg::muldiv_op_e test_op,
+    input fu_kind_e expected_fu
+  );
+    begin
+      drive_idle();
+
+      decode_valid = 1'b1;
+      decode_reg_write = 1'b1;
+      decode_rd = 5'd5;
+      decode_rs1_used = 1'b1;
+      decode_rs2_used = 1'b1;
+      decode_muldiv_op = test_op;
+      free_alloc_phys_rd = phys_reg_idx_t'(40);
+
+      #1;
+
+      if (decode_ready !== 1'b1 || dispatch_fire !== 1'b1 ||
+          issue_dispatch_valid !== 1'b1) begin
+        $error("test_muldiv_routing: decode_ready or dispatch_fire unexpectedly low");
+        errors++;
+      end
+
+      if (issue_dispatch_uop.muldiv_op !== test_op ||
+          issue_dispatch_uop.fu_kind !== expected_fu) begin
+        $error("test_muldiv_routing: issue_dispatch_uop.muldiv_op or issue_dispatch_uop.fu_kind mismatch");
+        errors++;
+      end
+    end
+  endtask
+
   initial begin
     errors = 0;
     drive_idle();
@@ -393,6 +430,9 @@ module rv32_rename_dispatch_tb;
     test_source_readiness("test_source_readiness: both sources unused", 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1);
     test_source_readiness("test_source_readiness: rs1 waiting, rs2 unused", 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
     test_source_readiness("test_source_readiness: rs1 ready, rs2 waiting", 1'b1, 1'b1, 1'b1, 1'b0, 1'b1, 1'b0);
+
+    test_muldiv_routing(rv32_pkg::MD_MUL, FU_MUL);
+    test_muldiv_routing(rv32_pkg::MD_DIV, FU_DIV);
 
     if (errors !== 0) begin
       $fatal(1, "rv32_rename_dispatch_tb: %0d errors", errors);

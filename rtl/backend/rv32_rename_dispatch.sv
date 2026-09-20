@@ -25,6 +25,7 @@ module rv32_rename_dispatch
   input  rv32_core_pkg::trap_cause_e   decode_trap_cause_i,
   input  logic [31:0]                  decode_imm_i,
   input  rv32_pkg::alu_op_e            decode_alu_op_i,
+  input  rv32_pkg::muldiv_op_e         decode_muldiv_op_i,
   input  rv32_pkg::branch_op_e         decode_branch_op_i,
   input  rv32_pkg::control_flow_e      decode_control_flow_i,
   input  rv32_pkg::operand_a_sel_e     decode_operand_a_sel_i,
@@ -65,6 +66,9 @@ module rv32_rename_dispatch
   logic destination_required;
   assign destination_required = decode_reg_write_i && !decode_trap_i && (decode_rd_i != 5'd0);
 
+  logic mul_operation;
+  logic div_operation;
+
   // Dispatch is atomic across the ROB, Issue Queue, and optional physical-register
   // allocation. Every state-changing valid derives from the same accepted input.
   assign decode_ready_o = !rst_i && !recover_i && rob_alloc_ready_i && issue_dispatch_ready_i &&
@@ -98,11 +102,21 @@ module rv32_rename_dispatch
   assign issue_dispatch_uop_o.rs2_used = !decode_trap_i && decode_rs2_used_i;
   assign issue_dispatch_uop_o.rd_write = destination_required;
   assign issue_dispatch_uop_o.alu_op = decode_alu_op_i;
+  // Trap uops remain MD_NONE because they complete through the ordinary
+  // integer path.
+  assign issue_dispatch_uop_o.muldiv_op = decode_trap_i ? rv32_pkg::MD_NONE : decode_muldiv_op_i;
   assign issue_dispatch_uop_o.branch_op = decode_branch_op_i;
   assign issue_dispatch_uop_o.control_flow = decode_trap_i ? rv32_pkg::CF_NONE : decode_control_flow_i;
   assign issue_dispatch_uop_o.operand_a_sel = decode_operand_a_sel_i;
   assign issue_dispatch_uop_o.operand_b_sel = decode_operand_b_sel_i;
-  assign issue_dispatch_uop_o.fu_kind = (!decode_trap_i && decode_control_flow_i != rv32_pkg::CF_NONE) ? FU_BRANCH : FU_ALU;
+  // Trap and control-flow routing takes priority over RV32M classification.
+  assign mul_operation = decode_muldiv_op_i == rv32_pkg::MD_MUL || decode_muldiv_op_i == rv32_pkg::MD_MULH || decode_muldiv_op_i == rv32_pkg::MD_MULHSU || decode_muldiv_op_i == rv32_pkg::MD_MULHU;
+  assign div_operation = decode_muldiv_op_i == rv32_pkg::MD_DIV || decode_muldiv_op_i == rv32_pkg::MD_DIVU || decode_muldiv_op_i == rv32_pkg::MD_REM || decode_muldiv_op_i == rv32_pkg::MD_REMU;
+  assign issue_dispatch_uop_o.fu_kind = decode_trap_i ? FU_ALU :
+                                        decode_control_flow_i != rv32_pkg::CF_NONE ? FU_BRANCH :
+                                        mul_operation ? FU_MUL :
+                                        div_operation ? FU_DIV :
+                                        FU_ALU;
   assign issue_dispatch_rs1_ready_o = decode_trap_i || !decode_rs1_used_i || prf_rs1_ready_i;
   assign issue_dispatch_rs2_ready_o = decode_trap_i || !decode_rs2_used_i || prf_rs2_ready_i;
 
