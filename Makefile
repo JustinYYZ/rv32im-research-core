@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Build and simulation entry points for RV32IM Research Core.
-# Run all unit tests with `make test`, or select one of the module targets below.
+# Run all simulation regressions with `make test`, or select a target below.
 
 CAD_ENV   ?=
 IVERILOG  ?= iverilog
@@ -85,6 +85,44 @@ OOO_MULTIPLIER_SRCS := \
 	rtl/backend/rv32_ooo_multiplier.sv \
 	tb/unit/rv32_ooo_multiplier_tb.sv
 
+OOO_DIVIDER_TEST := $(BUILD_DIR)/rv32_ooo_divider_tb
+OOO_DIVIDER_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/backend/rv32_ooo_divider.sv \
+	tb/unit/rv32_ooo_divider_tb.sv
+
+OOO_RV32M_TEST := $(BUILD_DIR)/rv32_ooo_rv32m_tb
+OOO_RV32M_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/frontend/rv32_fetch_queue.sv \
+	rtl/frontend/rv32_ooo_frontend.sv \
+	rtl/frontend/rv32_decoder.sv \
+	rtl/frontend/rv32_imm_gen.sv \
+	rtl/backend/rv32_alu.sv \
+	rtl/backend/rv32_branch_unit.sv \
+	rtl/backend/rv32_phys_regfile.sv \
+	rtl/backend/rv32_rename_map.sv \
+	rtl/backend/rv32_free_list.sv \
+	rtl/backend/rv32_rob.sv \
+	rtl/backend/rv32_issue_queue.sv \
+	rtl/backend/rv32_rename_dispatch.sv \
+	rtl/backend/rv32_issue_stage.sv \
+	rtl/backend/rv32_completion_buffer.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/backend/rv32_ooo_multiplier.sv \
+	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_cdb_arbiter.sv \
+	rtl/backend/rv32_ooo_backend.sv \
+	rtl/core/rv32_ooo_core.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_ooo_rv32m_tb.sv
+
 OOO_INTEGER_TEST := $(BUILD_DIR)/rv32_ooo_integer_tb
 OOO_INTEGER_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -100,6 +138,11 @@ OOO_INTEGER_SRCS := \
 	rtl/backend/rv32_rename_dispatch.sv \
 	rtl/backend/rv32_issue_stage.sv \
 	rtl/backend/rv32_completion_buffer.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/backend/rv32_ooo_multiplier.sv \
+	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_cdb_arbiter.sv \
 	rtl/backend/rv32_ooo_backend.sv \
 	tb/core/rv32_ooo_integer_tb.sv
 
@@ -122,6 +165,11 @@ OOO_CORE_SRCS := \
 	rtl/backend/rv32_rename_dispatch.sv \
 	rtl/backend/rv32_issue_stage.sv \
 	rtl/backend/rv32_completion_buffer.sv \
+	rtl/backend/rv32_multiplier.sv \
+	rtl/backend/rv32_divider.sv \
+	rtl/backend/rv32_ooo_multiplier.sv \
+	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_cdb_arbiter.sv \
 	rtl/backend/rv32_ooo_backend.sv \
 	rtl/core/rv32_ooo_core.sv \
 	tb/core/rv32_ooo_core_tb.sv
@@ -445,7 +493,7 @@ DCACHE_SRCS := \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
 
-.PHONY: compile-cdb-arbiter compile-ooo-multiplier
+.PHONY: compile-cdb-arbiter compile-ooo-multiplier compile-ooo-divider test-ooo-divider compile-ooo-rv32m test-ooo-rv32m
 
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
 .PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
@@ -454,7 +502,7 @@ DCACHE_SRCS := \
 .PHONY: compile-dcache test-dcache
 .PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-rv32m test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -535,6 +583,28 @@ $(OOO_MULTIPLIER_TEST): $(OOO_MULTIPLIER_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_multiplier_tb -o $@ $(OOO_MULTIPLIER_SRCS)'
+
+# Compile or run the buffered OoO divider completion-path regression.
+compile-ooo-divider: $(OOO_DIVIDER_TEST)
+
+test-ooo-divider: $(OOO_DIVIDER_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_DIVIDER_TEST): $(OOO_DIVIDER_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_divider_tb -o $@ $(OOO_DIVIDER_SRCS)'
+
+# Core-level MUL/DIV dependency, completion-arbitration, and recovery regression.
+compile-ooo-rv32m: $(OOO_RV32M_TEST)
+
+test-ooo-rv32m: $(OOO_RV32M_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_RV32M_TEST): $(OOO_RV32M_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_rv32m_tb -o $@ $(OOO_RV32M_SRCS)'
 
 # Compile or run the integrated integer OoO backend regression.
 compile-ooo-integer: $(OOO_INTEGER_TEST)
@@ -892,5 +962,6 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
+	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(ISSUE_QUEUE_TEST)
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(FREE_LIST_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
 		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Out-of-order RV32IM core integration top. The current core connects Fetch,
-// Decode, register renaming, dynamic integer scheduling, ordered retirement,
-// control-flow recovery, and precise synchronous traps. OoO memory and RV32M
-// execution are intentionally left for later integration stages.
+// Out-of-order core integration top for RV32I integer/control-flow and RV32M
+// execution. Fetch and Decode feed a renaming backend with a shared completion
+// bus, ordered retirement, branch recovery, and precise synchronous traps.
+// Data-memory and L1 integration remain outside this top.
 
 `timescale 1ns/1ps
 
@@ -189,8 +189,8 @@ module rv32_ooo_core #(
     .redirect_pc_o(redirect_pc)
   );
 
-  // The data-memory interface remains inactive until the ordered O6 memory path
-  // is integrated. Unsupported memory and RV32M operations are not consumed.
+  // Data-memory and memory-commit outputs remain inactive until the ordered
+  // memory path is integrated. Decode does not consume load/store requests.
   assign dmem_req_valid_o = 1'b0;
   assign dmem_req_addr_o = 32'b0;
   assign dmem_req_write_o = 1'b0;
@@ -211,12 +211,12 @@ module rv32_ooo_core #(
 
   assign frontend_redirect_valid = redirect_valid || commit_trap_o;
 
-  // Keep RV32M blocked until O5E connects real execution and completion paths.
-  // O5A only transports and classifies its control metadata.
+  // Accept legal integer/control-flow and RV32M operations, plus FENCE as a
+  // no-op on this memory-free path. Synchronous traps use decoder_trap above;
+  // loads and stores remain blocked until an LSU path is connected.
   assign integer_supported = !fetch_entry.access_fault &&
                              !decoder_illegal &&
                              decoder_mem_op == rv32_pkg::MEM_NONE &&
-                             decoder_muldiv_op == rv32_pkg::MD_NONE &&
                              (decoder_system_op == rv32_pkg::SYS_NONE ||
                               decoder_system_op == rv32_pkg::SYS_FENCE);
 

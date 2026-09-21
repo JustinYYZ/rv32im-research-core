@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Single-dispatch, single-issue integer out-of-order backend. It connects
-// rename, dynamic scheduling, ALU/control-flow execution, completion, ordered
-// retirement, misprediction recovery, and precise trap recovery. Memory and
-// RV32M functional units are added in later stages.
+// Single-dispatch, single-issue out-of-order backend with integer/control-flow
+// execution and buffered RV32M producers. A shared CDB completes the ROB and
+// wakes dependents; retirement preserves program order and recovers speculative
+// state on redirects or traps. Data-memory execution is not yet integrated.
 
 `timescale 1ns/1ps
 
@@ -94,12 +94,33 @@ module rv32_ooo_backend
   logic [31:0]         execute_result;
   logic [31:0]         execute_actual_next_pc;
 
+  // Each producer retains its completion until selected by the arbiter. Only
+  // the final CDB payload drives PRF writeback, ROB completion, and IQ wakeup.
+  logic                alu_completion_valid;
+  logic                alu_completion_ready;
+  completion_payload_t alu_completion_payload;
+
+  logic                mul_completion_valid;
+  logic                mul_completion_ready;
+  completion_payload_t mul_completion_payload;
+
+  logic                div_completion_valid;
+  logic                div_completion_ready;
+  completion_payload_t div_completion_payload;
+
+  logic                alu_issue_valid;
+  logic                mul_issue_valid;
+  logic                mul_issue_ready;
+  logic                div_issue_valid;
+  logic                div_issue_ready;
+
   logic                cdb_valid;
   rob_tag_t            cdb_rob_tag;
   phys_reg_idx_t       cdb_phys_rd;
   logic                cdb_rd_write;
   logic [31:0]         cdb_result;
   logic [31:0]         cdb_actual_next_pc;
+  completion_payload_t cdb_payload;
 
   logic                rob_retire_valid;
   rob_entry_t          rob_head_entry;
@@ -259,11 +280,16 @@ module rv32_ooo_backend
     .dispatch_fire_o(dispatch_fire)
   );
 
+  // Route the single selected uop to one execution path. The Issue Stage
+  // addresses the shared PRF read ports for ALU/branch and MUL/DIV alike.
+  assign alu_issue_valid = issue_valid && ((issue_uop.fu_kind == FU_ALU) || (issue_uop.fu_kind == FU_BRANCH));
+  assign mul_issue_valid = issue_valid && (issue_uop.fu_kind == FU_MUL);
+  assign div_issue_valid = issue_valid && (issue_uop.fu_kind == FU_DIV);
   rv32_issue_stage issue_stage (
     .rst_i(rst_i),
     .flush_i(backend_recover),
 
-    .issue_valid_i(issue_valid),
+    .issue_valid_i(alu_issue_valid),
     .issue_ready_o(issue_ready),
     .issue_uop_i(issue_uop),
 
@@ -281,6 +307,42 @@ module rv32_ooo_backend
     .completion_actual_next_pc_o(execute_actual_next_pc)
   );
 
+  rv32_ooo_multiplier multiplier (
+    .clk_i(clk_i),
+    .rst_i(rst_i),
+    .flush_i(backend_recover),
+
+    .issue_valid_i(mul_issue_valid),
+    .issue_ready_o(mul_issue_ready),
+    .issue_uop_i(issue_uop),
+
+    .issue_lhs_i(prf_rdata1),
+    .issue_rhs_i(prf_rdata2),
+
+    .completion_valid_o(mul_completion_valid),
+    .completion_ready_i(mul_completion_ready),
+    .completion_payload_o(mul_completion_payload)
+  );
+
+  rv32_ooo_divider divider (
+    .clk_i(clk_i),
+    .rst_i(rst_i),
+    .flush_i(backend_recover),
+
+    .issue_valid_i(div_issue_valid),
+    .issue_ready_o(div_issue_ready),
+    .issue_uop_i(issue_uop),
+
+    .issue_lhs_i(prf_rdata1),
+    .issue_rhs_i(prf_rdata2),
+
+    .completion_valid_o(div_completion_valid),
+    .completion_ready_i(div_completion_ready),
+    .completion_payload_o(div_completion_payload)
+  );
+
+  // The existing ALU/branch buffer supplies one of the three CDB producers.
+  // Its scalar outputs form the same payload used by the MUL/DIV wrappers.
   rv32_completion_buffer completion_buffer (
     .clk_i(clk_i),
     .rst_i(rst_i),
@@ -294,21 +356,53 @@ module rv32_ooo_backend
     .execute_result_i(execute_result),
     .execute_actual_next_pc_i(execute_actual_next_pc),
 
-    .cdb_valid_o(cdb_valid),
-    .cdb_ready_i(1'b1),
-    .cdb_rob_tag_o(cdb_rob_tag),
-    .cdb_phys_rd_o(cdb_phys_rd),
-    .cdb_rd_write_o(cdb_rd_write),
-    .cdb_result_o(cdb_result),
-    .cdb_actual_next_pc_o(cdb_actual_next_pc)
+    .cdb_valid_o(alu_completion_valid),
+    .cdb_ready_i(alu_completion_ready),
+    .cdb_rob_tag_o(alu_completion_payload.rob_tag),
+    .cdb_phys_rd_o(alu_completion_payload.phys_rd),
+    .cdb_rd_write_o(alu_completion_payload.rd_write),
+    .cdb_result_o(alu_completion_payload.result),
+    .cdb_actual_next_pc_o(alu_completion_payload.actual_next_pc)
   );
 
-  // ALU and branch operations share the current integer Issue Stage and its
-  // completion buffer. Later functional units receive independent buffers.
+  // PRF and ROB accept one broadcast per cycle without downstream stalls.
+  // Producer-side ready still provides backpressure when another source wins.
+  rv32_cdb_arbiter cdb_arbiter (
+    .clk_i(clk_i),
+    .rst_i(rst_i),
+    .flush_i(backend_recover),
+
+    .alu_valid_i(alu_completion_valid),
+    .alu_ready_o(alu_completion_ready),
+    .alu_payload_i(alu_completion_payload),
+
+    .mul_valid_i(mul_completion_valid),
+    .mul_ready_o(mul_completion_ready),
+    .mul_payload_i(mul_completion_payload),
+
+    .div_valid_i(div_completion_valid),
+    .div_ready_o(div_completion_ready),
+    .div_payload_i(div_completion_payload),
+
+    .cdb_valid_o(cdb_valid),
+    .cdb_ready_i(1'b1),
+    .cdb_payload_o(cdb_payload)
+  );
+
+  assign cdb_rob_tag = cdb_payload.rob_tag;
+  assign cdb_phys_rd = cdb_payload.phys_rd;
+  assign cdb_rd_write = cdb_payload.rd_write;
+  assign cdb_result = cdb_payload.result;
+  assign cdb_actual_next_pc = cdb_payload.actual_next_pc;
+
+  // Scheduling considers each producer's capacity independently, so a busy
+  // divider does not block ready ALU/MUL work. Memory Issue remains disabled.
   always_comb begin
     fu_ready = '0;
     fu_ready[FU_ALU] = issue_ready;
     fu_ready[FU_BRANCH] = issue_ready;
+    fu_ready[FU_MUL] = mul_issue_ready;
+    fu_ready[FU_DIV] = div_issue_ready;
   end
 
   // Retirement follows ready/valid semantics. RRAT and Free List state changes
