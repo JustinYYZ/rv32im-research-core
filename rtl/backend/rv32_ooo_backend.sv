@@ -3,7 +3,7 @@
 // Single-dispatch, single-issue out-of-order backend with integer/control-flow
 // execution and buffered RV32M producers. A shared CDB completes the ROB and
 // wakes dependents; retirement preserves program order and recovers speculative
-// state on redirects or traps. Data-memory execution is not yet integrated.
+// state on redirects or traps. Memory uops execute through one ordered LSU.
 
 `timescale 1ns/1ps
 
@@ -28,10 +28,23 @@ module rv32_ooo_backend
   input  logic [31:0]                  decode_imm_i,
   input  rv32_pkg::alu_op_e            decode_alu_op_i,
   input  rv32_pkg::muldiv_op_e         decode_muldiv_op_i,
+  input  rv32_pkg::mem_op_e            decode_mem_op_i,
+  input  rv32_pkg::mem_size_e          decode_mem_size_i,
+  input  logic                         decode_load_unsigned_i,
   input  rv32_pkg::branch_op_e         decode_branch_op_i,
   input  rv32_pkg::control_flow_e      decode_control_flow_i,
   input  rv32_pkg::operand_a_sel_e     decode_operand_a_sel_i,
   input  rv32_pkg::operand_b_sel_e     decode_operand_b_sel_i,
+
+  output logic                         dmem_req_valid_o,
+  input  logic                         dmem_req_ready_i,
+  output logic [31:0]                  dmem_req_addr_o,
+  output logic                         dmem_req_write_o,
+  output logic [31:0]                  dmem_req_wdata_o,
+  output logic [3:0]                   dmem_req_wstrb_o,
+  input  logic                         dmem_resp_valid_i,
+  input  logic [31:0]                  dmem_resp_rdata_i,
+  input  logic                         dmem_resp_error_i,
 
   output logic                         commit_valid_o,
   input  logic                         commit_ready_i,
@@ -42,6 +55,13 @@ module rv32_ooo_backend
   output logic [31:0]                  commit_result_o,
   output logic                         commit_trap_o,
   output rv32_core_pkg::trap_cause_e   commit_trap_cause_o,
+  output logic                         commit_mem_valid_o,
+  output logic                         commit_mem_write_o,
+  output logic [31:0]                  commit_mem_addr_o,
+  output logic [3:0]                   commit_mem_rmask_o,
+  output logic [3:0]                   commit_mem_wmask_o,
+  output logic [31:0]                  commit_mem_rdata_o,
+  output logic [31:0]                  commit_mem_wdata_o,
 
   output logic                         redirect_valid_o,
   output logic [31:0]                  redirect_pc_o
@@ -108,11 +128,17 @@ module rv32_ooo_backend
   logic                div_completion_ready;
   completion_payload_t div_completion_payload;
 
+  logic                mem_completion_valid;
+  logic                mem_completion_ready;
+  completion_payload_t mem_completion_payload;
+
   logic                alu_issue_valid;
   logic                mul_issue_valid;
   logic                mul_issue_ready;
   logic                div_issue_valid;
   logic                div_issue_ready;
+  logic                mem_issue_valid;
+  logic                mem_issue_ready;
 
   logic                cdb_valid;
   rob_tag_t            cdb_rob_tag;
@@ -123,6 +149,8 @@ module rv32_ooo_backend
   completion_payload_t cdb_payload;
 
   logic                rob_retire_valid;
+  logic                rob_head_valid;
+  rob_tag_t            rob_head_tag;
   rob_entry_t          rob_head_entry;
   logic                commit_fire;
   logic                trap_commit;
@@ -140,7 +168,7 @@ module rv32_ooo_backend
     .rename_old_phys_rd_o(map_rename_old_phys_rd),
     .rename_valid_i(map_rename_valid),
     .rename_new_phys_rd_i(map_rename_new_phys_rd),
-    .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write),
+    .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write && !rob_head_entry.payload.trap),
     .commit_arch_rd_i(rob_head_entry.payload.rd),
     .commit_phys_rd_i(rob_head_entry.payload.new_phys_rd),
     .recover_i(backend_recover)
@@ -152,7 +180,7 @@ module rv32_ooo_backend
     .alloc_valid_i(free_alloc_valid),
     .alloc_ready_o(free_alloc_ready),
     .alloc_phys_rd_o(free_alloc_phys_rd),
-    .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write),
+    .commit_valid_i(commit_fire && rob_head_entry.payload.reg_write && !rob_head_entry.payload.trap),
     .commit_new_phys_rd_i(rob_head_entry.payload.new_phys_rd),
     .commit_old_phys_rd_i(rob_head_entry.payload.old_phys_rd),
     .recover_i(backend_recover)
@@ -192,11 +220,20 @@ module rv32_ooo_backend
     .complete_tag_i(cdb_rob_tag),
     .complete_result_i(cdb_result),
     .complete_actual_next_pc_i(cdb_actual_next_pc),
+    .complete_trap_i(cdb_payload.trap),
+    .complete_trap_cause_i(cdb_payload.trap_cause),
+    .complete_mem_valid_i(cdb_payload.mem_valid),
+    .complete_mem_write_i(cdb_payload.mem_write),
+    .complete_mem_addr_i(cdb_payload.mem_addr),
+    .complete_mem_rmask_i(cdb_payload.mem_rmask),
+    .complete_mem_wmask_i(cdb_payload.mem_wmask),
+    .complete_mem_rdata_i(cdb_payload.mem_rdata),
+    .complete_mem_wdata_i(cdb_payload.mem_wdata),
 
     .retire_ready_i(commit_ready_i && !recover_i),
     .retire_valid_o(rob_retire_valid),
-    .head_valid_o(),
-    .head_tag_o(),
+    .head_valid_o(rob_head_valid),
+    .head_tag_o(rob_head_tag),
     .head_entry_o(rob_head_entry),
 
     .empty_o(),
@@ -217,6 +254,8 @@ module rv32_ooo_backend
 
     .cdb_valid_i(cdb_valid && cdb_rd_write),
     .cdb_phys_rd_i(cdb_phys_rd),
+    .rob_head_valid_i(rob_head_valid),
+    .rob_head_tag_i(rob_head_tag),
 
     .fu_ready_i(fu_ready),
     .issue_valid_o(issue_valid),
@@ -245,6 +284,9 @@ module rv32_ooo_backend
     .decode_imm_i(decode_imm_i),
     .decode_alu_op_i(decode_alu_op_i),
     .decode_muldiv_op_i(decode_muldiv_op_i),
+    .decode_mem_op_i(decode_mem_op_i),
+    .decode_mem_size_i(decode_mem_size_i),
+    .decode_load_unsigned_i(decode_load_unsigned_i),
     .decode_branch_op_i(decode_branch_op_i),
     .decode_control_flow_i(decode_control_flow_i),
     .decode_operand_a_sel_i(decode_operand_a_sel_i),
@@ -281,10 +323,11 @@ module rv32_ooo_backend
   );
 
   // Route the single selected uop to one execution path. The Issue Stage
-  // addresses the shared PRF read ports for ALU/branch and MUL/DIV alike.
+  // addresses the shared PRF read ports for every execution path.
   assign alu_issue_valid = issue_valid && ((issue_uop.fu_kind == FU_ALU) || (issue_uop.fu_kind == FU_BRANCH));
   assign mul_issue_valid = issue_valid && (issue_uop.fu_kind == FU_MUL);
   assign div_issue_valid = issue_valid && (issue_uop.fu_kind == FU_DIV);
+  assign mem_issue_valid = issue_valid && (issue_uop.fu_kind == FU_MEMORY);
   rv32_issue_stage issue_stage (
     .rst_i(rst_i),
     .flush_i(backend_recover),
@@ -341,7 +384,39 @@ module rv32_ooo_backend
     .completion_payload_o(div_completion_payload)
   );
 
-  // The existing ALU/branch buffer supplies one of the three CDB producers.
+  rv32_ooo_lsu lsu (
+    .clk_i(clk_i),
+    .rst_i(rst_i),
+    .flush_i(backend_recover),
+    .issue_valid_i(mem_issue_valid),
+    .issue_ready_o(mem_issue_ready),
+    .issue_uop_i(issue_uop),
+    .issue_base_i(prf_rdata1),
+    .issue_store_value_i(prf_rdata2),
+    .dmem_req_valid_o(dmem_req_valid_o),
+    .dmem_req_ready_i(dmem_req_ready_i),
+    .dmem_req_addr_o(dmem_req_addr_o),
+    .dmem_req_write_o(dmem_req_write_o),
+    .dmem_req_wdata_o(dmem_req_wdata_o),
+    .dmem_req_wstrb_o(dmem_req_wstrb_o),
+    .dmem_resp_valid_i(dmem_resp_valid_i),
+    .dmem_resp_rdata_i(dmem_resp_rdata_i),
+    .dmem_resp_error_i(dmem_resp_error_i),
+    .completion_valid_o(mem_completion_valid),
+    .completion_ready_i(mem_completion_ready),
+    .completion_payload_o(mem_completion_payload),
+    .completion_trap_o(),
+    .completion_trap_cause_o(),
+    .completion_mem_valid_o(),
+    .completion_mem_write_o(),
+    .completion_mem_addr_o(),
+    .completion_mem_rmask_o(),
+    .completion_mem_wmask_o(),
+    .completion_mem_rdata_o(),
+    .completion_mem_wdata_o()
+  );
+
+  // The existing ALU/branch buffer supplies one of the four CDB producers.
   // Its scalar outputs form the same payload used by the MUL/DIV wrappers.
   rv32_completion_buffer completion_buffer (
     .clk_i(clk_i),
@@ -365,6 +440,16 @@ module rv32_ooo_backend
     .cdb_actual_next_pc_o(alu_completion_payload.actual_next_pc)
   );
 
+  assign alu_completion_payload.trap = 1'b0;
+  assign alu_completion_payload.trap_cause = rv32_core_pkg::trap_cause_e'(4'b0);
+  assign alu_completion_payload.mem_valid = 1'b0;
+  assign alu_completion_payload.mem_write = 1'b0;
+  assign alu_completion_payload.mem_addr = 32'b0;
+  assign alu_completion_payload.mem_rmask = 4'b0;
+  assign alu_completion_payload.mem_wmask = 4'b0;
+  assign alu_completion_payload.mem_rdata = 32'b0;
+  assign alu_completion_payload.mem_wdata = 32'b0;
+
   // PRF and ROB accept one broadcast per cycle without downstream stalls.
   // Producer-side ready still provides backpressure when another source wins.
   rv32_cdb_arbiter cdb_arbiter (
@@ -384,6 +469,10 @@ module rv32_ooo_backend
     .div_ready_o(div_completion_ready),
     .div_payload_i(div_completion_payload),
 
+    .mem_valid_i(mem_completion_valid),
+    .mem_ready_o(mem_completion_ready),
+    .mem_payload_i(mem_completion_payload),
+
     .cdb_valid_o(cdb_valid),
     .cdb_ready_i(1'b1),
     .cdb_payload_o(cdb_payload)
@@ -396,13 +485,14 @@ module rv32_ooo_backend
   assign cdb_actual_next_pc = cdb_payload.actual_next_pc;
 
   // Scheduling considers each producer's capacity independently, so a busy
-  // divider does not block ready ALU/MUL work. Memory Issue remains disabled.
+  // divider does not block ready ALU/MUL work.
   always_comb begin
     fu_ready = '0;
     fu_ready[FU_ALU] = issue_ready;
     fu_ready[FU_BRANCH] = issue_ready;
     fu_ready[FU_MUL] = mul_issue_ready;
     fu_ready[FU_DIV] = div_issue_ready;
+    fu_ready[FU_MEMORY] = mem_issue_ready;
   end
 
   // Retirement follows ready/valid semantics. RRAT and Free List state changes
@@ -412,10 +502,17 @@ module rv32_ooo_backend
   assign commit_pc_o = commit_valid_o ? rob_head_entry.payload.pc : 32'b0;
   assign commit_instr_o = commit_valid_o ? rob_head_entry.payload.instr : 32'b0;
   assign commit_rd_o = commit_valid_o ? rob_head_entry.payload.rd : 5'b0;
-  assign commit_reg_write_o = commit_valid_o && rob_head_entry.payload.reg_write;
+  assign commit_reg_write_o = commit_valid_o && rob_head_entry.payload.reg_write && !rob_head_entry.payload.trap;
   assign commit_result_o = commit_valid_o ? rob_head_entry.result : 32'b0;
   assign commit_trap_o = commit_valid_o && rob_head_entry.payload.trap;
   assign commit_trap_cause_o = rv32_core_pkg::trap_cause_e'(commit_trap_o ? rob_head_entry.payload.trap_cause : rv32_core_pkg::CORE_TRAP_NONE);
+  assign commit_mem_valid_o = commit_valid_o && rob_head_entry.mem_valid && !rob_head_entry.payload.trap;
+  assign commit_mem_write_o = commit_mem_valid_o && rob_head_entry.mem_write;
+  assign commit_mem_addr_o = commit_mem_valid_o ? rob_head_entry.mem_addr : 32'b0;
+  assign commit_mem_rmask_o = commit_mem_valid_o ? rob_head_entry.mem_rmask : 4'b0;
+  assign commit_mem_wmask_o = commit_mem_valid_o ? rob_head_entry.mem_wmask : 4'b0;
+  assign commit_mem_rdata_o = commit_mem_valid_o ? rob_head_entry.mem_rdata : 32'b0;
+  assign commit_mem_wdata_o = commit_mem_valid_o ? rob_head_entry.mem_wdata : 32'b0;
   assign trap_commit = commit_fire && rob_head_entry.payload.trap;
   assign redirect_valid_o = commit_fire &&
                             !rob_head_entry.payload.trap &&

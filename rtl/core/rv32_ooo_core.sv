@@ -3,7 +3,8 @@
 // Out-of-order core integration top for RV32I integer/control-flow and RV32M
 // execution. Fetch and Decode feed a renaming backend with a shared completion
 // bus, ordered retirement, branch recovery, and precise synchronous traps.
-// Data-memory and L1 integration remain outside this top.
+// Ordered data-memory execution uses the external data port. L1 integration
+// remains outside this top.
 
 `timescale 1ns/1ps
 
@@ -64,12 +65,12 @@ module rv32_ooo_core #(
   rv32_pkg::operand_b_sel_e     decoder_operand_b_sel;
   rv32_pkg::imm_kind_e          decoder_imm_kind;
   rv32_pkg::muldiv_op_e         decoder_muldiv_op;
-  rv32_pkg::branch_op_e         decoder_branch_op;
-  rv32_pkg::control_flow_e      decoder_control_flow;
-  rv32_pkg::writeback_sel_e     decoder_writeback_sel;
   rv32_pkg::mem_op_e            decoder_mem_op;
   rv32_pkg::mem_size_e          decoder_mem_size;
   logic                         decoder_load_unsigned;
+  rv32_pkg::branch_op_e         decoder_branch_op;
+  rv32_pkg::control_flow_e      decoder_control_flow;
+  rv32_pkg::writeback_sel_e     decoder_writeback_sel;
   logic                         decoder_reg_write;
   logic                         decoder_illegal;
   rv32_pkg::system_op_e         decoder_system_op;
@@ -170,10 +171,23 @@ module rv32_ooo_core #(
     .decode_imm_i(decoder_imm),
     .decode_alu_op_i(decoder_alu_op),
     .decode_muldiv_op_i(decoder_muldiv_op),
+    .decode_mem_op_i(decoder_mem_op),
+    .decode_mem_size_i(decoder_mem_size),
+    .decode_load_unsigned_i(decoder_load_unsigned),
     .decode_branch_op_i(decoder_branch_op),
     .decode_control_flow_i(decoder_control_flow),
     .decode_operand_a_sel_i(decoder_operand_a_sel),
     .decode_operand_b_sel_i(decoder_operand_b_sel),
+
+    .dmem_req_valid_o(dmem_req_valid_o),
+    .dmem_req_ready_i(dmem_req_ready_i),
+    .dmem_req_addr_o(dmem_req_addr_o),
+    .dmem_req_write_o(dmem_req_write_o),
+    .dmem_req_wdata_o(dmem_req_wdata_o),
+    .dmem_req_wstrb_o(dmem_req_wstrb_o),
+    .dmem_resp_valid_i(dmem_resp_valid_i),
+    .dmem_resp_rdata_i(dmem_resp_rdata_i),
+    .dmem_resp_error_i(dmem_resp_error_i),
 
     .commit_valid_o(commit_valid_o),
     .commit_ready_i(1'b1),
@@ -184,26 +198,18 @@ module rv32_ooo_core #(
     .commit_result_o(commit_rd_wdata_o),
     .commit_trap_o(commit_trap_o),
     .commit_trap_cause_o(commit_trap_cause_o),
+    .commit_mem_valid_o(commit_mem_valid_o),
+    .commit_mem_write_o(commit_mem_write_o),
+    .commit_mem_addr_o(commit_mem_addr_o),
+    .commit_mem_rmask_o(commit_mem_rmask_o),
+    .commit_mem_wmask_o(commit_mem_wmask_o),
+    .commit_mem_rdata_o(commit_mem_rdata_o),
+    .commit_mem_wdata_o(commit_mem_wdata_o),
 
     .redirect_valid_o(redirect_valid),
     .redirect_pc_o(redirect_pc)
   );
 
-  // Data-memory and memory-commit outputs remain inactive until the ordered
-  // memory path is integrated. Decode does not consume load/store requests.
-  assign dmem_req_valid_o = 1'b0;
-  assign dmem_req_addr_o = 32'b0;
-  assign dmem_req_write_o = 1'b0;
-  assign dmem_req_wdata_o = 32'b0;
-  assign dmem_req_wstrb_o = 4'b0;
-
-  assign commit_mem_valid_o = 1'b0;
-  assign commit_mem_write_o = 1'b0;
-  assign commit_mem_addr_o = 32'b0;
-  assign commit_mem_rmask_o = 4'b0;
-  assign commit_mem_wmask_o = 4'b0;
-  assign commit_mem_rdata_o = 32'b0;
-  assign commit_mem_wdata_o = 32'b0;
   assign halted_o = halted_q;
 
   assign backend_decode_valid = !halted_q && fetch_valid && (integer_supported || decoder_trap);
@@ -211,12 +217,10 @@ module rv32_ooo_core #(
 
   assign frontend_redirect_valid = redirect_valid || commit_trap_o;
 
-  // Accept legal integer/control-flow and RV32M operations, plus FENCE as a
-  // no-op on this memory-free path. Synchronous traps use decoder_trap above;
-  // loads and stores remain blocked until an LSU path is connected.
+  // Legal RV32IM instructions, including loads and stores, enter the backend.
+  // FENCE has no memory side effect; synchronous traps use decoder_trap above.
   assign integer_supported = !fetch_entry.access_fault &&
                              !decoder_illegal &&
-                             decoder_mem_op == rv32_pkg::MEM_NONE &&
                              (decoder_system_op == rv32_pkg::SYS_NONE ||
                               decoder_system_op == rv32_pkg::SYS_FENCE);
 

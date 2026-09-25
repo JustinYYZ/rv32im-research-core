@@ -93,6 +93,15 @@ module rv32_ooo_divider
         completion_payload_q.rd_write <= request_rd_write_q;
         completion_payload_q.result <= divider_result;
         completion_payload_q.actual_next_pc <= request_actual_next_pc_q;
+        completion_payload_q.trap <= 1'b0;
+        completion_payload_q.trap_cause <= rv32_core_pkg::trap_cause_e'(4'b0);
+        completion_payload_q.mem_valid <= 1'b0;
+        completion_payload_q.mem_write <= 1'b0;
+        completion_payload_q.mem_addr <= 32'b0;
+        completion_payload_q.mem_rmask <= 4'b0;
+        completion_payload_q.mem_wmask <= 4'b0;
+        completion_payload_q.mem_rdata <= 32'b0;
+        completion_payload_q.mem_wdata <= 32'b0;
         request_active_q <= 1'b0;
       end
 

@@ -23,6 +23,15 @@ module rv32_rob
     input  rob_tag_t                   complete_tag_i,
     input  logic [31:0]                complete_result_i,
     input  logic [31:0]                complete_actual_next_pc_i,
+    input  logic                       complete_trap_i,
+    input  rv32_core_pkg::trap_cause_e complete_trap_cause_i,
+    input  logic                       complete_mem_valid_i,
+    input  logic                       complete_mem_write_i,
+    input  logic [31:0]                complete_mem_addr_i,
+    input  logic [3:0]                 complete_mem_rmask_i,
+    input  logic [3:0]                 complete_mem_wmask_i,
+    input  logic [31:0]                complete_mem_rdata_i,
+    input  logic [31:0]                complete_mem_wdata_i,
 
     input  logic                       retire_ready_i,
     output logic                       retire_valid_o,
@@ -49,8 +58,17 @@ module rv32_rob
   logic [ROB_ENTRIES-1:0] entry_completed_q;
   logic [ROB_ENTRIES-1:0] entry_generation_q;
   rob_alloc_payload_t entry_payload_q [0:ROB_ENTRIES-1];
+  logic entry_trap_q [0:ROB_ENTRIES-1];
+  rv32_core_pkg::trap_cause_e entry_trap_cause_q [0:ROB_ENTRIES-1];
   logic [31:0] entry_result_q [0:ROB_ENTRIES-1];
   logic [31:0] entry_actual_next_pc_q [0:ROB_ENTRIES-1];
+  logic        entry_mem_valid_q [0:ROB_ENTRIES-1];
+  logic        entry_mem_write_q [0:ROB_ENTRIES-1];
+  logic [31:0] entry_mem_addr_q [0:ROB_ENTRIES-1];
+  logic [3:0]  entry_mem_rmask_q [0:ROB_ENTRIES-1];
+  logic [3:0]  entry_mem_wmask_q [0:ROB_ENTRIES-1];
+  logic [31:0] entry_mem_rdata_q [0:ROB_ENTRIES-1];
+  logic [31:0] entry_mem_wdata_q [0:ROB_ENTRIES-1];
 
   // Explicit occupancy distinguishes full from empty when the circular head
   // and tail pointers have the same index.
@@ -84,8 +102,17 @@ module rv32_rob
     head_entry_o.completed = entry_completed_q[head_index_q];
     head_entry_o.generation = entry_generation_q[head_index_q];
     head_entry_o.payload = entry_payload_q[head_index_q];
+    head_entry_o.payload.trap = entry_trap_q[head_index_q];
+    head_entry_o.payload.trap_cause = entry_trap_cause_q[head_index_q];
     head_entry_o.result = entry_result_q[head_index_q];
     head_entry_o.actual_next_pc = entry_actual_next_pc_q[head_index_q];
+    head_entry_o.mem_valid = entry_mem_valid_q[head_index_q];
+    head_entry_o.mem_write = entry_mem_write_q[head_index_q];
+    head_entry_o.mem_addr = entry_mem_addr_q[head_index_q];
+    head_entry_o.mem_rmask = entry_mem_rmask_q[head_index_q];
+    head_entry_o.mem_wmask = entry_mem_wmask_q[head_index_q];
+    head_entry_o.mem_rdata = entry_mem_rdata_q[head_index_q];
+    head_entry_o.mem_wdata = entry_mem_wdata_q[head_index_q];
   end
 
   always_ff @(posedge clk_i) begin
@@ -112,6 +139,17 @@ module rv32_rob
         entry_completed_q[complete_tag_i.index] <= 1'b1;
         entry_result_q[complete_tag_i.index] <= complete_result_i;
         entry_actual_next_pc_q[complete_tag_i.index] <= complete_actual_next_pc_i;
+        if (complete_trap_i) begin
+          entry_trap_q[complete_tag_i.index] <= 1'b1;
+          entry_trap_cause_q[complete_tag_i.index] <= complete_trap_cause_i;
+        end
+        entry_mem_valid_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i;
+        entry_mem_write_q[complete_tag_i.index] <= complete_mem_write_i && !complete_trap_i;
+        entry_mem_addr_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i ? complete_mem_addr_i : 32'b0;
+        entry_mem_rmask_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i ? complete_mem_rmask_i : 4'b0;
+        entry_mem_wmask_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i ? complete_mem_wmask_i : 4'b0;
+        entry_mem_rdata_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i ? complete_mem_rdata_i : 32'b0;
+        entry_mem_wdata_q[complete_tag_i.index] <= complete_mem_valid_i && !complete_trap_i ? complete_mem_wdata_i : 32'b0;
       end
 
       // Allocation advances the tail and changes generation on wraparound.
@@ -120,8 +158,17 @@ module rv32_rob
         entry_completed_q[tail_index_q] <= 1'b0;
         entry_generation_q[tail_index_q] <= tail_generation_q;
         entry_payload_q[tail_index_q] <= alloc_payload_i;
+        entry_trap_q[tail_index_q] <= alloc_payload_i.trap;
+        entry_trap_cause_q[tail_index_q] <= alloc_payload_i.trap_cause;
         entry_result_q[tail_index_q] <= '0;
         entry_actual_next_pc_q[tail_index_q] <= '0;
+        entry_mem_valid_q[tail_index_q] <= 1'b0;
+        entry_mem_write_q[tail_index_q] <= 1'b0;
+        entry_mem_addr_q[tail_index_q] <= '0;
+        entry_mem_rmask_q[tail_index_q] <= '0;
+        entry_mem_wmask_q[tail_index_q] <= '0;
+        entry_mem_rdata_q[tail_index_q] <= '0;
+        entry_mem_wdata_q[tail_index_q] <= '0;
         if (tail_index_q == ROB_INDEX_WIDTH'(ROB_ENTRIES - 1)) begin
           tail_index_q <= '0;
           tail_generation_q <= ~tail_generation_q;

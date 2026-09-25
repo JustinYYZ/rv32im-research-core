@@ -24,6 +24,9 @@ module rv32_rename_dispatch_tb;
   logic [31:0]                  decode_imm;
   rv32_pkg::alu_op_e            decode_alu_op;
   rv32_pkg::muldiv_op_e         decode_muldiv_op;
+  rv32_pkg::mem_op_e            decode_mem_op;
+  rv32_pkg::mem_size_e          decode_mem_size;
+  logic                         decode_load_unsigned;
   rv32_pkg::branch_op_e         decode_branch_op;
   rv32_pkg::control_flow_e      decode_control_flow;
   rv32_pkg::operand_a_sel_e     decode_operand_a_sel;
@@ -70,6 +73,9 @@ module rv32_rename_dispatch_tb;
     .decode_imm_i(decode_imm),
     .decode_alu_op_i(decode_alu_op),
     .decode_muldiv_op_i(decode_muldiv_op),
+    .decode_mem_op_i(decode_mem_op),
+    .decode_mem_size_i(decode_mem_size),
+    .decode_load_unsigned_i(decode_load_unsigned),
     .decode_branch_op_i(decode_branch_op),
     .decode_control_flow_i(decode_control_flow),
     .decode_operand_a_sel_i(decode_operand_a_sel),
@@ -115,6 +121,9 @@ module rv32_rename_dispatch_tb;
       decode_imm = '0;
       decode_alu_op = rv32_pkg::ALU_ADD;
       decode_muldiv_op = rv32_pkg::MD_NONE;
+      decode_mem_op = rv32_pkg::MEM_NONE;
+      decode_mem_size = rv32_pkg::MEM_BYTE;
+      decode_load_unsigned = 1'b0;
       decode_branch_op = rv32_pkg::BR_EQ;
       decode_control_flow = rv32_pkg::CF_NONE;
       decode_operand_a_sel = rv32_pkg::OP_A_RS1;
@@ -243,6 +252,9 @@ module rv32_rename_dispatch_tb;
       expected_uop.rd_write = 1'b1;
       expected_uop.alu_op = rv32_pkg::ALU_ADD;
       expected_uop.muldiv_op = rv32_pkg::MD_NONE;
+      expected_uop.mem_op = rv32_pkg::MEM_NONE;
+      expected_uop.mem_size = rv32_pkg::MEM_BYTE;
+      expected_uop.load_unsigned = 1'b0;
       expected_uop.branch_op = rv32_pkg::BR_EQ;
       expected_uop.control_flow = rv32_pkg::CF_NONE;
       expected_uop.operand_a_sel = rv32_pkg::OP_A_RS1;
@@ -413,6 +425,58 @@ module rv32_rename_dispatch_tb;
     end
   endtask
 
+  task automatic test_memory_routing(
+    input string test_name,
+    input rv32_pkg::mem_op_e test_mem_op,
+    input rv32_pkg::mem_size_e test_mem_size,
+    input logic test_load_unsigned,
+    input logic test_reg_write,
+    input logic test_rs2_used
+  );
+    begin
+      drive_idle();
+
+      decode_valid = 1'b1;
+      decode_rs1_used = 1'b1;
+      decode_rs2_used = test_rs2_used;
+      decode_rd = test_reg_write ? 5'd5 : 5'd0;
+      decode_reg_write = test_reg_write;
+      decode_mem_op = test_mem_op;
+      decode_mem_size = test_mem_size;
+      decode_load_unsigned = test_load_unsigned;
+      free_alloc_phys_rd = phys_reg_idx_t'(40);
+
+      #1;
+
+      if (decode_ready !== 1'b1 || dispatch_fire !== 1'b1 || issue_dispatch_valid !== 1'b1) begin
+        $error("%s: decode_ready or dispatch_fire unexpectedly low", test_name);
+        errors++;
+      end
+
+      if (issue_dispatch_uop.mem_op !== test_mem_op ||
+          issue_dispatch_uop.mem_size !== test_mem_size ||
+          issue_dispatch_uop.load_unsigned !== test_load_unsigned ||
+          issue_dispatch_uop.fu_kind !== FU_MEMORY) begin
+        $error("%s: issue_dispatch_uop.mem_op or issue_dispatch_uop.mem_size or issue_dispatch_uop.load_unsigned mismatch", test_name);
+        errors++;
+      end
+
+      if (issue_dispatch_uop.rs1_used !== 1'b1 || issue_dispatch_uop.rs2_used !== test_rs2_used) begin
+        $error("%s: issue_dispatch_uop.rs1_used or issue_dispatch_uop.rs2_used mismatch", test_name);
+        errors++;
+      end
+
+      if (issue_dispatch_uop.rd_write !== test_reg_write ||
+          rob_alloc_payload.reg_write !== test_reg_write ||
+          free_alloc_valid !== test_reg_write ||
+          map_rename_valid !== test_reg_write ||
+          prf_alloc_valid !== test_reg_write) begin
+        $error("%s: destination allocation mismatch", test_name);
+        errors++;
+      end
+    end
+  endtask
+
   initial begin
     errors = 0;
     drive_idle();
@@ -433,6 +497,9 @@ module rv32_rename_dispatch_tb;
 
     test_muldiv_routing(rv32_pkg::MD_MUL, FU_MUL);
     test_muldiv_routing(rv32_pkg::MD_DIV, FU_DIV);
+
+    test_memory_routing("test_memory_routing: LHU", rv32_pkg::MEM_LOAD, rv32_pkg::MEM_HALF, 1'b1, 1'b1, 1'b0);
+    test_memory_routing("test_memory_routing: SW", rv32_pkg::MEM_STORE, rv32_pkg::MEM_WORD, 1'b0, 1'b0, 1'b1);
 
     if (errors !== 0) begin
       $fatal(1, "rv32_rename_dispatch_tb: %0d errors", errors);

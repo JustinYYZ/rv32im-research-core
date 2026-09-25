@@ -18,6 +18,8 @@ module rv32_issue_queue_tb;
   logic                         dispatch_rs2_ready;
   logic                         cdb_valid;
   phys_reg_idx_t                cdb_phys_rd;
+  logic                         rob_head_valid;
+  rob_tag_t                     rob_head_tag;
   logic [FU_COUNT-1:0]          fu_ready;
   logic                         issue_valid;
   issue_uop_t                   issue_uop;
@@ -37,6 +39,8 @@ module rv32_issue_queue_tb;
     .dispatch_rs2_ready_i(dispatch_rs2_ready),
     .cdb_valid_i(cdb_valid),
     .cdb_phys_rd_i(cdb_phys_rd),
+    .rob_head_valid_i(rob_head_valid),
+    .rob_head_tag_i(rob_head_tag),
     .fu_ready_i(fu_ready),
     .issue_valid_o(issue_valid),
     .issue_uop_o(issue_uop),
@@ -60,6 +64,8 @@ module rv32_issue_queue_tb;
       dispatch_rs2_ready = 1'b0;
       cdb_valid = 1'b0;
       cdb_phys_rd = '0;
+      rob_head_valid = 1'b0;
+      rob_head_tag = '0;
       fu_ready = '0;
     end
   endtask
@@ -409,7 +415,47 @@ module rv32_issue_queue_tb;
       #1;
       fu_ready = '0;
       check_status("after div issue", 1'b1, 1'b0, '0, 1'b1, 1'b0);
+    end
+  endtask
 
+  task automatic test_memory_head_ordering;
+    issue_uop_t memory_uop;
+    begin
+      reset_dut();
+      memory_uop = '0;
+      memory_uop.rob_tag.generation = 1'b1;
+      memory_uop.rob_tag.index = ROB_INDEX_WIDTH'(5);
+      memory_uop.phys_rs1 = phys_reg_idx_t'(10);
+      memory_uop.phys_rd = phys_reg_idx_t'(40);
+      memory_uop.rs1_used = 1'b1;
+      memory_uop.rs2_used = 1'b0;
+      memory_uop.rd_write = 1'b1;
+      memory_uop.mem_op = rv32_pkg::MEM_LOAD;
+      memory_uop.mem_size = rv32_pkg::MEM_WORD;
+      memory_uop.load_unsigned = 1'b0;
+      memory_uop.fu_kind = FU_MEMORY;
+
+      dispatch_one(memory_uop, 1'b1, 1'b0);
+      fu_ready[FU_MEMORY] = 1'b1;
+
+      rob_head_valid = 1'b0;
+      rob_head_tag = memory_uop.rob_tag;
+      check_issue("memory entry blocked by head", 1'b0, '0);
+
+      rob_head_valid = 1'b1;
+      rob_head_tag = memory_uop.rob_tag;
+      rob_head_tag.generation = 1'b0;
+      check_issue("memory entry blocked by head mismatch", 1'b0, '0);
+
+      rob_head_tag = memory_uop.rob_tag;
+      check_issue("memory entry ready with head match", 1'b1, memory_uop);
+
+      @(posedge clk);
+      #1;
+      check_status("after memory issue", 1'b1, 1'b0, '0, 1'b1, 1'b0);
+
+      @(negedge clk);
+      drive_idle();
     end
   endtask
 
@@ -564,6 +610,8 @@ module rv32_issue_queue_tb;
     dispatch_rs2_ready = 1'b0;
     cdb_valid = 1'b0;
     cdb_phys_rd = '0;
+    rob_head_valid = 1'b0;
+    rob_head_tag = '0;
     fu_ready = '0;
     errors = 0;
 
@@ -573,6 +621,7 @@ module rv32_issue_queue_tb;
     test_issue_removal();
     test_cdb_wakeup();
     test_fu_selection();
+    test_memory_head_ordering();
     test_full_queue();
     test_p0_cdb_ignored();
     test_flush_priority();

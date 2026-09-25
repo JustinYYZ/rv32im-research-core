@@ -20,6 +20,9 @@ module rv32_cdb_arbiter_tb;
   logic                div_valid;
   logic                div_ready;
   completion_payload_t div_payload;
+  logic                mem_valid;
+  logic                mem_ready;
+  completion_payload_t mem_payload;
   logic                cdb_valid;
   logic                cdb_ready;
   completion_payload_t cdb_payload;
@@ -38,6 +41,9 @@ module rv32_cdb_arbiter_tb;
     .div_valid_i(div_valid),
     .div_ready_o(div_ready),
     .div_payload_i(div_payload),
+    .mem_valid_i(mem_valid),
+    .mem_ready_o(mem_ready),
+    .mem_payload_i(mem_payload),
     .cdb_valid_o(cdb_valid),
     .cdb_ready_i(cdb_ready),
     .cdb_payload_o(cdb_payload)
@@ -55,6 +61,8 @@ module rv32_cdb_arbiter_tb;
       mul_payload = '0;
       div_valid = 1'b0;
       div_payload = '0;
+      mem_valid = 1'b0;
+      mem_payload = '0;
       cdb_ready = 1'b0;
     end
   endtask
@@ -92,7 +100,8 @@ module rv32_cdb_arbiter_tb;
       if (cdb_valid !== 1'b1 ||
           alu_ready !== 1'b1 ||
           mul_ready !== 1'b0 ||
-          div_ready !== 1'b0) begin
+          div_ready !== 1'b0 ||
+          mem_ready !== 1'b0) begin
         $error("test_single_producer: handshake mismatch");
         errors++;
       end
@@ -114,7 +123,8 @@ module rv32_cdb_arbiter_tb;
     input completion_payload_t expected_payload,
     input logic expected_alu_ready,
     input logic expected_mul_ready,
-    input logic expected_div_ready
+    input logic expected_div_ready,
+    input logic expected_mem_ready
   );
     begin
       #1;
@@ -122,7 +132,8 @@ module rv32_cdb_arbiter_tb;
           cdb_payload !== expected_payload ||
           alu_ready !== expected_alu_ready ||
           mul_ready !== expected_mul_ready ||
-          div_ready !== expected_div_ready) begin
+          div_ready !== expected_div_ready ||
+          mem_ready !== expected_mem_ready) begin
         $error("%s: handshake mismatch", test_name);
         errors++;
       end
@@ -144,15 +155,23 @@ module rv32_cdb_arbiter_tb;
       mul_payload.result = 32'hbbbb_bbbb;
       div_payload = '0;
       div_payload.result = 32'hcccc_cccc;
+      mem_payload = '0;
+      mem_payload.mem_valid = 1'b1;
+      mem_payload.mem_write = 1'b1;
+      mem_payload.mem_addr = 32'h0000_2000;
+      mem_payload.mem_wmask = 4'b1111;
+      mem_payload.mem_wdata = 32'hdddd_dddd;
 
       alu_valid = 1'b1;
       mul_valid = 1'b1;
       div_valid = 1'b1;
+      mem_valid = 1'b1;
       cdb_ready = 1'b1;
 
-      check_grant("test_round_robin: ALU grant", alu_payload, 1'b1, 1'b0, 1'b0);
-      check_grant("test_round_robin: MUL grant", mul_payload, 1'b0, 1'b1, 1'b0);
-      check_grant("test_round_robin: DIV grant", div_payload, 1'b0, 1'b0, 1'b1);
+      check_grant("test_round_robin: ALU grant", alu_payload, 1'b1, 1'b0, 1'b0, 1'b0);
+      check_grant("test_round_robin: MUL grant", mul_payload, 1'b0, 1'b1, 1'b0, 1'b0);
+      check_grant("test_round_robin: DIV grant", div_payload, 1'b0, 1'b0, 1'b1, 1'b0);
+      check_grant("test_round_robin: MEM grant", mem_payload, 1'b0, 1'b0, 1'b0, 1'b1);
 
       @(negedge clk);
       drive_idle();
@@ -171,7 +190,8 @@ module rv32_cdb_arbiter_tb;
           cdb_payload !== expected_payload ||
           alu_ready !== 1'b0 ||
           mul_ready !== 1'b0 ||
-          div_ready !== 1'b0) begin
+          div_ready !== 1'b0 ||
+          mem_ready !== 1'b0) begin
         $error("%s: handshake mismatch", test_name);
         errors++;
       end
@@ -202,8 +222,8 @@ module rv32_cdb_arbiter_tb;
       @(negedge clk);
 
       cdb_ready = 1'b1;
-      check_grant("test_backpressure: ALU grant after stall", alu_payload, 1'b1, 1'b0, 1'b0);
-      check_grant("test_backpressure: MUL grant after stall", mul_payload, 1'b0, 1'b1, 1'b0);
+      check_grant("test_backpressure: ALU grant after stall", alu_payload, 1'b1, 1'b0, 1'b0, 1'b0);
+      check_grant("test_backpressure: MUL grant after stall", mul_payload, 1'b0, 1'b1, 1'b0, 1'b0);
 
       @(negedge clk);
       drive_idle();

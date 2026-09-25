@@ -30,6 +30,15 @@ module rv32_rob_completion_tb;
   logic                       complete_valid;
   rob_tag_t                   complete_tag;
   logic [31:0]                complete_result;
+  logic                       complete_trap;
+  rv32_core_pkg::trap_cause_e complete_trap_cause;
+  logic                       complete_mem_valid;
+  logic                       complete_mem_write;
+  logic [31:0]                complete_mem_addr;
+  logic [3:0]                 complete_mem_rmask;
+  logic [3:0]                 complete_mem_wmask;
+  logic [31:0]                complete_mem_rdata;
+  logic [31:0]                complete_mem_wdata;
 
   rob_alloc_payload_t payload_a;
   rob_alloc_payload_t payload_b;
@@ -50,6 +59,15 @@ module rv32_rob_completion_tb;
     .complete_tag_i     (complete_tag),
     .complete_result_i  (complete_result),
     .complete_actual_next_pc_i(32'b0),
+    .complete_trap_i(complete_trap),
+    .complete_trap_cause_i(complete_trap_cause),
+    .complete_mem_valid_i(complete_mem_valid),
+    .complete_mem_write_i(complete_mem_write),
+    .complete_mem_addr_i(complete_mem_addr),
+    .complete_mem_rmask_i(complete_mem_rmask),
+    .complete_mem_wmask_i(complete_mem_wmask),
+    .complete_mem_rdata_i(complete_mem_rdata),
+    .complete_mem_wdata_i(complete_mem_wdata),
     .retire_ready_i     (retire_ready),
     .retire_valid_o     (retire_valid),
     .head_valid_o       (head_valid),
@@ -77,6 +95,40 @@ module rv32_rob_completion_tb;
       @(posedge clk);
       #1;
       rst = 1'b0;
+    end
+  endtask
+
+  task automatic test_memory_completion;
+    rob_alloc_payload_t payload;
+    rob_tag_t tag;
+    begin
+      retire_head();
+      payload = '0;
+      payload.pc = 32'h0000_3000;
+      allocate_payload(payload, tag);
+      complete_mem_valid = 1'b1;
+      complete_mem_write = 1'b1;
+      complete_mem_addr = 32'h0000_4000;
+      complete_mem_wmask = 4'b0100;
+      complete_mem_wdata = 32'h00aa_0000;
+      send_completion(tag, 32'b0);
+      if (head_entry.mem_valid !== 1'b1 || head_entry.mem_write !== 1'b1 || head_entry.mem_addr !== 32'h0000_4000 || head_entry.mem_wmask !== 4'b0100 || head_entry.mem_wdata !== 32'h00aa_0000 || head_entry.payload.trap !== 1'b0) begin
+        $display("memory completion: ERROR - store metadata was not retained at ROB Head");
+        errors++;
+      end
+
+      retire_head();
+      payload = '0;
+      payload.pc = 32'h0000_3004;
+      payload.reg_write = 1'b1;
+      allocate_payload(payload, tag);
+      complete_trap = 1'b1;
+      complete_trap_cause = rv32_core_pkg::CORE_TRAP_LOAD_ACCESS_FAULT;
+      send_completion(tag, 32'b0);
+      if (head_entry.payload.trap !== 1'b1 || head_entry.payload.trap_cause !== rv32_core_pkg::CORE_TRAP_LOAD_ACCESS_FAULT || head_entry.mem_valid !== 1'b0 || head_entry.mem_write !== 1'b0 || head_entry.mem_addr !== 32'b0 || head_entry.mem_wmask !== 4'b0 || head_entry.mem_wdata !== 32'b0) begin
+        $display("memory completion: ERROR - fault did not suppress memory metadata");
+        errors++;
+      end
     end
   endtask
 
@@ -198,6 +250,15 @@ module rv32_rob_completion_tb;
     complete_valid = 1'b0;
     complete_tag = '0;
     complete_result = '0;
+    complete_trap = 1'b0;
+    complete_trap_cause = rv32_core_pkg::CORE_TRAP_NONE;
+    complete_mem_valid = 1'b0;
+    complete_mem_write = 1'b0;
+    complete_mem_addr = 32'b0;
+    complete_mem_rmask = 4'b0;
+    complete_mem_wmask = 4'b0;
+    complete_mem_rdata = 32'b0;
+    complete_mem_wdata = 32'b0;
     errors = 0;
 
     payload_a.pc = 32'h0000_2000;
@@ -280,10 +341,12 @@ module rv32_rob_completion_tb;
       errors++;
     end
 
+    test_memory_completion();
+
     if (errors != 0) begin
       $fatal(1, "rv32_rob_completion_tb: FAIL - %0d errors", errors);
     end
-    $display("rv32_rob_completion_tb: out-of-order and stale-tag completion checks passed");
+    $display("rv32_rob_completion_tb: out-of-order, stale-tag, and memory completion checks passed");
     $finish;
   end
 

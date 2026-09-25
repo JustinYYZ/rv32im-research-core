@@ -22,6 +22,9 @@ module rv32_issue_queue
   input  logic                         cdb_valid_i,
   input  phys_reg_idx_t                cdb_phys_rd_i,
 
+  input  logic                         rob_head_valid_i,
+  input  rob_tag_t                     rob_head_tag_i,
+
   input  logic [FU_COUNT-1:0]          fu_ready_i,
   output logic                         issue_valid_o,
   output issue_uop_t                   issue_uop_o,
@@ -79,6 +82,8 @@ module rv32_issue_queue
       if (entry_valid_q[issue_scan_idx] &&
           entry_rs1_ready_q[issue_scan_idx] &&
           entry_rs2_ready_q[issue_scan_idx] &&
+          ((issue_scan_uop.fu_kind != FU_MEMORY) ||
+           (rob_head_valid_i && (issue_scan_uop.rob_tag == rob_head_tag_i))) &&
           fu_ready_i[issue_scan_uop.fu_kind] &&
           !issue_candidate_found) begin
         issue_candidate_found = 1'b1;

@@ -26,6 +26,9 @@ module rv32_rename_dispatch
   input  logic [31:0]                  decode_imm_i,
   input  rv32_pkg::alu_op_e            decode_alu_op_i,
   input  rv32_pkg::muldiv_op_e         decode_muldiv_op_i,
+  input  rv32_pkg::mem_op_e            decode_mem_op_i,
+  input  rv32_pkg::mem_size_e          decode_mem_size_i,
+  input  logic                         decode_load_unsigned_i,
   input  rv32_pkg::branch_op_e         decode_branch_op_i,
   input  rv32_pkg::control_flow_e      decode_control_flow_i,
   input  rv32_pkg::operand_a_sel_e     decode_operand_a_sel_i,
@@ -105,6 +108,9 @@ module rv32_rename_dispatch
   // Trap uops remain MD_NONE because they complete through the ordinary
   // integer path.
   assign issue_dispatch_uop_o.muldiv_op = decode_trap_i ? rv32_pkg::MD_NONE : decode_muldiv_op_i;
+  assign issue_dispatch_uop_o.mem_op = decode_trap_i ? rv32_pkg::MEM_NONE : decode_mem_op_i;
+  assign issue_dispatch_uop_o.mem_size = decode_trap_i ? rv32_pkg::MEM_BYTE : decode_mem_size_i;
+  assign issue_dispatch_uop_o.load_unsigned = !decode_trap_i && decode_load_unsigned_i;
   assign issue_dispatch_uop_o.branch_op = decode_branch_op_i;
   assign issue_dispatch_uop_o.control_flow = decode_trap_i ? rv32_pkg::CF_NONE : decode_control_flow_i;
   assign issue_dispatch_uop_o.operand_a_sel = decode_operand_a_sel_i;
@@ -114,6 +120,7 @@ module rv32_rename_dispatch
   assign div_operation = decode_muldiv_op_i == rv32_pkg::MD_DIV || decode_muldiv_op_i == rv32_pkg::MD_DIVU || decode_muldiv_op_i == rv32_pkg::MD_REM || decode_muldiv_op_i == rv32_pkg::MD_REMU;
   assign issue_dispatch_uop_o.fu_kind = decode_trap_i ? FU_ALU :
                                         decode_control_flow_i != rv32_pkg::CF_NONE ? FU_BRANCH :
+                                        decode_mem_op_i != rv32_pkg::MEM_NONE ? FU_MEMORY :
                                         mul_operation ? FU_MUL :
                                         div_operation ? FU_DIV :
                                         FU_ALU;

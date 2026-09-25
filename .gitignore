@@ -41,4 +41,5 @@ __pycache__/
 
 # Local planning and learning material (not published to GitHub)
 /PLAN.md
+/AGENTS.md
 /docs/tutorials/

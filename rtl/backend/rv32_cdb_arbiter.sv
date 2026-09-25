@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Round-robin arbiter for the ALU, multiplier, and divider completion paths.
+// Round-robin arbiter for the ALU, multiplier, divider, and memory completion paths.
 // Each producer retains its payload until ready is asserted. At most one
 // completion is transferred to the shared PRF/ROB writeback path per cycle.
 
@@ -25,6 +25,10 @@ module rv32_cdb_arbiter
   output logic                div_ready_o,
   input  completion_payload_t div_payload_i,
 
+  input  logic                mem_valid_i,
+  output logic                mem_ready_o,
+  input  completion_payload_t mem_payload_i,
+
   output logic                cdb_valid_o,
   input  logic                cdb_ready_i,
   output completion_payload_t cdb_payload_o
@@ -33,7 +37,8 @@ module rv32_cdb_arbiter
   typedef enum logic [1:0] {
     CDB_SOURCE_ALU,
     CDB_SOURCE_MUL,
-    CDB_SOURCE_DIV
+    CDB_SOURCE_DIV,
+    CDB_SOURCE_MEM
   } cdb_source_e;
 
   cdb_source_e priority_q;
@@ -47,6 +52,7 @@ module rv32_cdb_arbiter
     alu_ready_o = 1'b0;
     mul_ready_o = 1'b0;
     div_ready_o = 1'b0;
+    mem_ready_o = 1'b0;
     cdb_valid_o = 1'b0;
     cdb_payload_o = '0;
 
@@ -64,6 +70,9 @@ module rv32_cdb_arbiter
           end else if (div_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_DIV;
+          end else if (mem_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_MEM;
           end
         end
 
@@ -74,6 +83,9 @@ module rv32_cdb_arbiter
           end else if (div_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_DIV;
+          end else if (mem_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_MEM;
           end else if (alu_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_ALU;
@@ -84,12 +96,31 @@ module rv32_cdb_arbiter
           if (div_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_DIV;
+          end else if (mem_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_MEM;
           end else if (alu_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_ALU;
           end else if (mul_valid_i) begin
             selection_valid = 1'b1;
             selected_source = CDB_SOURCE_MUL;
+          end
+        end
+
+        CDB_SOURCE_MEM: begin
+          if (mem_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_MEM;
+          end else if (alu_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_ALU;
+          end else if (mul_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_MUL;
+          end else if (div_valid_i) begin
+            selection_valid = 1'b1;
+            selected_source = CDB_SOURCE_DIV;
           end
         end
       endcase
@@ -114,6 +145,11 @@ module rv32_cdb_arbiter
           cdb_payload_o = div_payload_i;
           div_ready_o = cdb_ready_i;
         end
+
+        CDB_SOURCE_MEM: begin
+          cdb_payload_o = mem_payload_i;
+          mem_ready_o = cdb_ready_i;
+        end
       endcase
     end
   end
@@ -128,7 +164,8 @@ module rv32_cdb_arbiter
       case (selected_source)
         CDB_SOURCE_ALU: priority_q <= CDB_SOURCE_MUL;
         CDB_SOURCE_MUL: priority_q <= CDB_SOURCE_DIV;
-        CDB_SOURCE_DIV: priority_q <= CDB_SOURCE_ALU;
+        CDB_SOURCE_DIV: priority_q <= CDB_SOURCE_MEM;
+        CDB_SOURCE_MEM: priority_q <= CDB_SOURCE_ALU;
         default:        priority_q <= CDB_SOURCE_ALU;
       endcase
     end

@@ -75,21 +75,21 @@ flowchart LR
     classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
-    class L1I,L1D,LSU partial
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
+    class L1I,L1D partial
     class L2 planned
     class MEM external
 ```
 
-Green nodes form the currently integrated OoO integer/control-flow, MUL/DIV, and shared-completion path. Amber nodes are implemented and tested elsewhere in the repository, but their OoO integration remains pending. Gray identifies planned structures, while blue identifies the external memory environment.
+Green nodes form the integrated OoO integer/control-flow, MUL/DIV, ordered-memory, and shared-completion paths. Amber caches are implemented and tested elsewhere in the repository, but their OoO integration remains pending. Gray identifies planned structures, while blue identifies the external memory environment.
 
 The design currently provides two complete RV32IM cores and one integrated partial OoO core:
 
 1. `rv32_reference_core`: implemented multicycle in-order architectural reference;
 2. `rv32_pipeline_core`: implemented five-stage in-order performance baseline;
-3. `rv32_ooo_core`: integrated single-dispatch/single-issue OoO core with integer/control-flow and RV32M execution, dynamic scheduling, in-order retirement, branch recovery, and precise synchronous traps.
+3. `rv32_ooo_core`: integrated single-dispatch/single-issue OoO core with RV32IM execution, ROB-Head-only memory scheduling, in-order retirement, branch recovery, and precise synchronous traps.
 
-The OoO core executes RV32I ALU/control-flow and RV32M instructions. Independent ALU, buffered multiplier, and single-request divider producers share a round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. Data-memory operations, L1 integration, and OoO/reference differential verification remain planned. All cores share the same external memory and architectural commit interface.
+The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. L1 integration and OoO/reference differential verification remain planned. All cores share the same external memory and architectural commit interface.
 
 ### Verification Strategy
 
@@ -139,7 +139,7 @@ scripts/             reserved for project automation beyond the Makefile
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow and RV32M execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. Data-memory/L1 integration, unified L2, and OoO differential verification remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. OoO L1 integration, unified L2, and OoO differential verification remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -168,11 +168,12 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - an atomic single-instruction Rename/Dispatch controller that allocates ROB and Issue Queue entries together with optional Free List, RAT, and PRF destination updates;
 - a combinational integer/control-flow Issue Stage with physical-register addressing, operand selection, branch comparison, actual-next-PC resolution, and completion backpressure;
 - a one-entry registered Completion Buffer carrying result and actual-next-PC metadata with stable retention, recovery Flush, and bubble-free consume-and-replace throughput;
-- a three-input round-robin CDB arbiter with single-winner downstream backpressure and fairness rotation;
+- a four-input round-robin CDB arbiter with single-winner downstream backpressure and fairness rotation;
 - a buffered OoO multiplier producer that aligns ROB/physical-register metadata with the pipelined result, reserves four outstanding credits, absorbs CDB backpressure, and discards queued or in-flight work on recovery;
 - a single-request OoO divider producer that retains instruction metadata, holds a completed result under CDB backpressure, and cancels active or buffered work on recovery;
-- an integrated single-dispatch/single-issue OoO backend connecting Rename, Issue Queue, shared PRF reads, ALU/MUL/DIV producers, CDB writeback, ROB completion, RRAT/Free List updates, ordered retirement, branch recovery, and trap recovery;
-- integrated OoO core regressions covering integer/control-flow execution, MUL/DIV dependencies, independent ALU completion during division, ALU/MUL arbitration and payload retention, active wrong-path DIV cancellation, precise ECALL retirement, and sticky halt;
+- an ordered one-request OoO LSU that issues only ROB-Head memory operations and preserves load/store completion, access-fault, and memory-commit metadata through CDB backpressure;
+- an integrated single-dispatch/single-issue OoO backend connecting Rename, Issue Queue, shared PRF reads, ALU/MUL/DIV/LSU producers, CDB writeback, ROB completion, RRAT/Free List updates, ordered retirement, branch recovery, and trap recovery;
+- integrated OoO core regressions covering integer/control-flow and RV32M execution, ordered load/store commits, subword formatting, memory faults and backpressure, wrong-path Store cancellation, precise ECALL retirement, and sticky halt;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
 - directed unit, reference-core, pipeline, and OoO integration regressions covering the implemented paths, alongside reference/pipeline differential verification.
@@ -338,21 +339,21 @@ flowchart LR
     classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
-    class L1I,L1D,LSU partial
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
+    class L1I,L1D partial
     class L2 planned
     class MEM external
 ```
 
-绿色节点组成当前已经接通的 OoO 整数、控制流、乘除法和统一完成广播路径。黄色节点已经在仓库其他部分实现并通过测试，但尚未接入 OoO core；灰色节点仍处于规划阶段；蓝色节点表示外部 memory 环境。
+绿色节点组成当前已经接通的 OoO 整数、控制流、乘除法、顺序访存和统一完成广播路径。黄色的 cache 已在仓库其他部分实现并测试，但尚未接入 OoO core；灰色节点仍处于规划阶段；蓝色节点表示外部 memory 环境。
 
 项目目前包含两个完整 RV32IM core 和一个已经接通的部分 OoO core：
 
 1. `rv32_reference_core`：已实现的多周期顺序 architectural reference；
 2. `rv32_pipeline_core`：已实现的五级顺序流水线性能 baseline；
-3. `rv32_ooo_core`：已接通的单 Dispatch、单 Issue OoO core，支持整数/控制流与 RV32M 执行、动态调度、顺序退休、分支恢复和精确同步异常。
+3. `rv32_ooo_core`：已接通的单 Dispatch、单 Issue OoO core，支持 RV32IM 执行、仅 ROB Head 可发射的访存调度、顺序退休、分支恢复和精确同步异常。
 
-当前 OoO core 可以执行 RV32I ALU、控制流和 RV32M 指令。ALU、带缓冲的乘法 producer 和单请求除法 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。数据访存、L1 接入以及 OoO/reference 差分验证仍待实现。所有 core 共用相同的外部 memory interface 和 architectural commit interface。
+当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。L1 接入以及 OoO/reference 差分验证仍待实现。所有 core 共用相同的外部 memory interface 和 architectural commit interface。
 
 ### 验证方法
 
@@ -401,7 +402,7 @@ scripts/             为 Makefile 之外的自动化脚本预留
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流与 RV32M 执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。数据访存/L1 接入、Unified L2 和 OoO 差分验证仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。OoO L1 接入、Unified L2 和 OoO 差分验证仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -429,11 +430,12 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 原子单指令 Rename/Dispatch 控制器，将 ROB 和 Issue Queue 分配与可选的 Free List、RAT 和 PRF 目标更新绑定为同一事务；
 - 组合逻辑整数/控制流 Issue Stage，支持物理寄存器寻址、操作数选择、branch compare、实际 next-PC 解析和 completion backpressure；
 - 单项寄存式 Completion Buffer，携带结果和 actual-next-PC metadata，支持稳定保持、recovery Flush 和无气泡 consume-and-replace；
-- 三输入 round-robin CDB arbiter，支持单 winner 下游 backpressure 和公平轮换；
+- 四输入 round-robin CDB arbiter，支持单 winner 下游 backpressure 和公平轮换；
 - 带缓冲的 OoO 乘法 producer，能够将 ROB/物理寄存器 metadata 与流水结果对齐，预留四个 outstanding credit，吸收 CDB backpressure，并在 recovery 时丢弃队列内和流水线内的旧工作；
 - 单请求 OoO 除法 producer，保存指令 metadata，在 CDB backpressure 下保持完成结果，并在 recovery 时清除在途计算或已保存结果；
-- 集成的单 Dispatch、单 Issue OoO backend，连接 Rename、Issue Queue、共享 PRF 读端口、ALU/MUL/DIV producer、CDB 写回、ROB 完成、RRAT/Free List 更新、顺序退休、分支恢复和异常恢复；
-- OoO core 自检 regression，覆盖整数/控制流执行、MUL/DIV 依赖、除法期间独立 ALU 先完成、ALU/MUL 仲裁与 payload 保持、错误路径在途 DIV 取消、精确 ECALL 退休和 sticky halt；
+- 单请求顺序 OoO LSU，仅允许 ROB Head 访存，并在 CDB backpressure 下保持 Load/Store completion、access fault 和 memory Commit metadata；
+- 集成的单 Dispatch、单 Issue OoO backend，连接 Rename、Issue Queue、共享 PRF 读端口、ALU/MUL/DIV/LSU producer、CDB 写回、ROB 完成、RRAT/Free List 更新、顺序退休、分支恢复和异常恢复；
+- OoO core 自检 regression，覆盖整数/控制流与 RV32M 执行、顺序 Load/Store Commit、subword 格式、访存异常及 backpressure、错误路径 Store 取消、精确 ECALL 退休和 sticky halt；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
 - 覆盖已接通路径的 unit、reference-core、pipeline 和 OoO integration directed regression，以及 reference/pipeline 差分验证。

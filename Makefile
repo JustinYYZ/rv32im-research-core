@@ -94,6 +94,15 @@ OOO_DIVIDER_SRCS := \
 	rtl/backend/rv32_ooo_divider.sv \
 	tb/unit/rv32_ooo_divider_tb.sv
 
+OOO_LSU_TEST := $(BUILD_DIR)/rv32_ooo_lsu_tb
+OOO_LSU_SRCS := \
+	rtl/pkg/rv32_pkg.sv \
+	rtl/pkg/rv32_core_pkg.sv \
+	rtl/pkg/rv32_ooo_pkg.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_ooo_lsu.sv \
+	tb/unit/rv32_ooo_lsu_tb.sv
+
 OOO_RV32M_TEST := $(BUILD_DIR)/rv32_ooo_rv32m_tb
 OOO_RV32M_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -117,6 +126,8 @@ OOO_RV32M_SRCS := \
 	rtl/backend/rv32_divider.sv \
 	rtl/backend/rv32_ooo_multiplier.sv \
 	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_ooo_lsu.sv \
 	rtl/backend/rv32_cdb_arbiter.sv \
 	rtl/backend/rv32_ooo_backend.sv \
 	rtl/core/rv32_ooo_core.sv \
@@ -142,6 +153,8 @@ OOO_INTEGER_SRCS := \
 	rtl/backend/rv32_divider.sv \
 	rtl/backend/rv32_ooo_multiplier.sv \
 	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_ooo_lsu.sv \
 	rtl/backend/rv32_cdb_arbiter.sv \
 	rtl/backend/rv32_ooo_backend.sv \
 	tb/core/rv32_ooo_integer_tb.sv
@@ -169,10 +182,18 @@ OOO_CORE_SRCS := \
 	rtl/backend/rv32_divider.sv \
 	rtl/backend/rv32_ooo_multiplier.sv \
 	rtl/backend/rv32_ooo_divider.sv \
+	rtl/backend/rv32_lsu.sv \
+	rtl/backend/rv32_ooo_lsu.sv \
 	rtl/backend/rv32_cdb_arbiter.sv \
 	rtl/backend/rv32_ooo_backend.sv \
 	rtl/core/rv32_ooo_core.sv \
 	tb/core/rv32_ooo_core_tb.sv
+
+OOO_MEMORY_TEST := $(BUILD_DIR)/rv32_ooo_memory_tb
+# Keep both core regressions on the same RTL source list.
+OOO_MEMORY_SRCS := $(filter-out tb/core/rv32_ooo_core_tb.sv,$(OOO_CORE_SRCS)) \
+	tb/model/rv32_simple_memory.sv \
+	tb/core/rv32_ooo_memory_tb.sv
 
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
@@ -493,16 +514,16 @@ DCACHE_SRCS := \
 	check-multiplier lint-multiplier synth-multiplier \
 	check-divider lint-divider synth-divider tools clean
 
-.PHONY: compile-cdb-arbiter compile-ooo-multiplier compile-ooo-divider test-ooo-divider compile-ooo-rv32m test-ooo-rv32m
+.PHONY: compile-cdb-arbiter compile-ooo-multiplier compile-ooo-divider test-ooo-divider compile-ooo-lsu test-ooo-lsu compile-ooo-rv32m test-ooo-rv32m
 
 .PHONY: compile-reference-core test-reference-core test-reference-core-trap test-reference-core-reset-pc check-reference-core lint-reference-core synth-reference-core
 .PHONY: compile-pipeline-core compile-pipeline-hazard compile-pipeline-forwarding compile-pipeline-control-flow compile-pipeline-memory compile-pipeline-muldiv compile-pipeline-trap test-pipeline-core test-pipeline-hazard test-pipeline-forwarding test-pipeline-control-flow test-pipeline-memory test-pipeline-muldiv test-pipeline-trap check-pipeline
 .PHONY: compile-core-differential test-core-differential
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
-.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core
+.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core test-ooo-memory
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-rv32m test-ooo-integer test-ooo-core test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-lsu test-ooo-rv32m test-ooo-integer test-ooo-core test-ooo-memory test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -595,6 +616,17 @@ $(OOO_DIVIDER_TEST): $(OOO_DIVIDER_SRCS)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_divider_tb -o $@ $(OOO_DIVIDER_SRCS)'
 
+# Compile or run the OoO LSU request, completion, fault, and recovery regression.
+compile-ooo-lsu: $(OOO_LSU_TEST)
+
+test-ooo-lsu: $(OOO_LSU_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_LSU_TEST): $(OOO_LSU_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_lsu_tb -o $@ $(OOO_LSU_SRCS)'
+
 # Core-level MUL/DIV dependency, completion-arbitration, and recovery regression.
 compile-ooo-rv32m: $(OOO_RV32M_TEST)
 
@@ -627,6 +659,15 @@ $(OOO_CORE_TEST): $(OOO_CORE_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_core_tb -o $@ $(OOO_CORE_SRCS)'
+
+# Exercise the ordered data port and architectural memory Commit path.
+test-ooo-memory: $(OOO_MEMORY_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_MEMORY_TEST): $(OOO_MEMORY_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_memory_tb -o $@ $(OOO_MEMORY_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)
@@ -962,6 +1003,6 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
-	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(ISSUE_QUEUE_TEST)
+	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_LSU_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(OOO_MEMORY_TEST) $(ISSUE_QUEUE_TEST)
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(FREE_LIST_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
 		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)

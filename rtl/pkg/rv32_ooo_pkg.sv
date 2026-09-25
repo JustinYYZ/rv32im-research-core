@@ -56,16 +56,33 @@ package rv32_ooo_pkg;
     rob_alloc_payload_t payload;
     logic [31:0]        result;
     logic [31:0]        actual_next_pc;
+    logic               mem_valid;
+    logic               mem_write;
+    logic [31:0]        mem_addr;
+    logic [3:0]         mem_rmask;
+    logic [3:0]         mem_wmask;
+    logic [31:0]        mem_rdata;
+    logic [31:0]        mem_wdata;
   } rob_entry_t;
 
-  // A completed instruction keeps its ROB and physical-register identities
-  // attached to the value while it waits for the shared CDB.
+  // The CDB carries one instruction's result, runtime trap, and memory record
+  // together with its ROB tag. Producers without memory effects leave those
+  // fields zero.
   typedef struct packed {
-    rob_tag_t      rob_tag;
-    phys_reg_idx_t phys_rd;
-    logic          rd_write;
-    logic [31:0]   result;
-    logic [31:0]   actual_next_pc;
+    rob_tag_t                   rob_tag;
+    phys_reg_idx_t              phys_rd;
+    logic                       rd_write;
+    logic [31:0]                result;
+    logic [31:0]                actual_next_pc;
+    logic                       trap;
+    rv32_core_pkg::trap_cause_e trap_cause;
+    logic                       mem_valid;
+    logic                       mem_write;
+    logic [31:0]                mem_addr;
+    logic [3:0]                 mem_rmask;
+    logic [3:0]                 mem_wmask;
+    logic [31:0]                mem_rdata;
+    logic [31:0]                mem_wdata;
   } completion_payload_t;
 
   localparam int unsigned ISSUE_ENTRIES = 8;
@@ -98,6 +115,9 @@ package rv32_ooo_pkg;
     // The decoded RV32M operation travels with the renamed instruction so the
     // selected MUL/DIV unit knows which architectural result to produce.
     rv32_pkg::muldiv_op_e         muldiv_op;
+    rv32_pkg::mem_op_e            mem_op;
+    rv32_pkg::mem_size_e          mem_size;
+    logic                         load_unsigned;
     rv32_pkg::branch_op_e         branch_op;
     rv32_pkg::control_flow_e      control_flow;
     rv32_pkg::operand_a_sel_e     operand_a_sel;
