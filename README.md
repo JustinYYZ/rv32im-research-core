@@ -87,7 +87,7 @@ The design currently provides three RV32IM core implementations:
 2. `rv32_pipeline_core`: implemented five-stage in-order performance baseline;
 3. `rv32_ooo_core`: integrated single-dispatch/single-issue OoO core with RV32IM execution, ROB-Head-only memory scheduling, in-order retirement, branch recovery, and precise synchronous traps.
 
-The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. `rv32_ooo_l1_top` connects the core to separate blocking instruction and data caches without changing its architectural commit interface. OoO/reference differential verification remains planned.
+The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. `rv32_ooo_l1_top` connects the core to separate blocking instruction and data caches without changing its architectural commit interface. Commit-level differential regressions compare both the raw OoO core and the L1-connected configuration against the reference core.
 
 ### Verification Strategy
 
@@ -97,7 +97,7 @@ Verification is developed together with the RTL:
 - instruction-level assembly tests;
 - randomized instruction and memory-response latency tests;
 - a common architectural commit trace;
-- implemented reference/pipeline commit differential checking; OoO/reference comparison remains planned;
+- implemented reference/pipeline and reference/OoO commit differential checking;
 - planned Spike comparison through an RVFI-like retirement interface;
 - Verilator lint and Yosys synthesis sanity checks;
 - implemented standalone and core-integrated L1 cache regressions covering hit, miss, refill, replacement, masked stores, dirty writeback, backpressure, and access errors.
@@ -137,7 +137,7 @@ scripts/             reserved for project automation beyond the Makefile
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Dedicated wrappers connect the separate L1 caches to both the pipeline and the OoO core. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. Unified L2 and OoO differential verification remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Dedicated wrappers connect the separate L1 caches to both the pipeline and the OoO core. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. Commit-level reference/OoO differential verification is implemented for both raw memory ports and the split-L1 wrapper; unified L2 remains planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -175,9 +175,10 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - integrated OoO core regressions covering integer/control-flow and RV32M execution, ordered load/store commits, subword formatting, memory faults and backpressure, wrong-path Store cancellation, precise ECALL retirement, and sticky halt;
 - precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
 - commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
-- directed unit, reference-core, pipeline, and OoO integration regressions covering the implemented paths, alongside reference/pipeline differential verification.
+- commit-level differential verification between the reference and OoO cores, with and without split L1 caches, covering RV32I/RV32M operations, control-flow recovery, subword memory behavior, misalignment, access faults, and final memory signatures;
+- directed unit, reference-core, pipeline, and OoO integration regressions covering the implemented paths.
 
-Core-level RV32M directed programs use MUL and DIV to check integration behavior. Decoder tests cover all eight RV32M operations; Rename/Dispatch routing tests directly check representative MUL and DIV operations. Standalone arithmetic tests cover signed/unsigned variants and corner cases. These checks are not a complete OoO ISA compliance or differential suite.
+Core-level RV32M directed programs use MUL and DIV to check integration behavior. Decoder tests cover all eight RV32M operations; Rename/Dispatch routing tests directly check representative MUL and DIV operations. Standalone arithmetic tests cover signed/unsigned variants and corner cases. These checks and the internal reference differential suite are not a substitute for external ISA compliance or Spike/RVFI verification.
 
 Run the current regression with:
 
@@ -225,6 +226,13 @@ Run the reference-versus-pipeline commit differential test with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-core-differential
+```
+
+Run the reference-versus-OoO differential regressions on raw memory ports and through split L1 caches with:
+
+```bash
+make CAD_ENV=/path/to/env.sh test-ooo-differential
+make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
 ```
 
 Run the standalone I-cache regression and the pipeline/OoO L1-wrapper regressions with:
@@ -352,7 +360,7 @@ flowchart LR
 2. `rv32_pipeline_core`：已实现的五级顺序流水线性能 baseline；
 3. `rv32_ooo_core`：已接通的单 Dispatch、单 Issue OoO core，支持 RV32IM 执行、仅 ROB Head 可发射的访存调度、顺序退休、分支恢复和精确同步异常。
 
-当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。`rv32_ooo_l1_top` 在不改变 architectural commit interface 的前提下，将 core 接到分离式 blocking instruction/data cache。OoO/reference 差分验证仍待实现。
+当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。`rv32_ooo_l1_top` 在不改变 architectural commit interface 的前提下，将 core 接到分离式 blocking instruction/data cache。Commit-level 差分回归已经能够将原始 OoO core 和带 L1 的配置分别与 reference core 比较。
 
 ### 验证方法
 
@@ -362,7 +370,7 @@ flowchart LR
 - 指令级汇编测试；
 - 随机指令和随机 memory response latency；
 - 统一 architectural commit trace；
-- 已实现 reference/pipeline 逐条 Commit 差分比较；OoO/reference 比较仍待接入；
+- 已实现 reference/pipeline 和 reference/OoO 逐条 Commit 差分比较；
 - 计划通过 RVFI-like retirement interface 与 Spike 比较；
 - Verilator lint 和 Yosys synthesis sanity check；
 - 已实现独立和 core 集成层级的 L1 cache regression，覆盖 hit、miss、refill、replacement、masked store、dirty writeback、backpressure 和 access error。
@@ -401,7 +409,7 @@ scripts/             为 Makefile 之外的自动化脚本预留
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。独立 wrapper 已将两个 L1 cache 分别接入 pipeline 和 OoO core。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。Unified L2 和 OoO 差分验证仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。独立 wrapper 已将两个 L1 cache 分别接入 pipeline 和 OoO core。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。原始 memory port 和 split-L1 wrapper 两种配置的 reference/OoO Commit 差分验证已经实现，Unified L2 仍处于规划阶段。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -438,9 +446,10 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - OoO core 自检 regression，覆盖整数/控制流与 RV32M 执行、顺序 Load/Store Commit、subword 格式、访存异常及 backpressure、错误路径 Store 取消、精确 ECALL 退休和 sticky halt；
 - 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
 - Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
-- 覆盖已接通路径的 unit、reference-core、pipeline 和 OoO integration directed regression，以及 reference/pipeline 差分验证。
+- Reference core 与 OoO core 之间的 commit-level 差分验证，覆盖原始 memory port 与 split L1 两种配置，以及 RV32I/RV32M、控制流恢复、subword memory、地址未对齐、access fault 和最终 memory signature；
+- 覆盖已接通路径的 unit、reference-core、pipeline 和 OoO integration directed regression。
 
-Core-level RV32M 定向程序使用 MUL 和 DIV 检查集成行为；decoder 测试覆盖八条 RV32M 指令，Rename/Dispatch 路由测试直接检查 MUL、DIV 两个代表，独立算术测试覆盖有符号/无符号变体及边界情况。这不等于完整的 OoO ISA 合规或差分验证。
+Core-level RV32M 定向程序使用 MUL 和 DIV 检查集成行为；decoder 测试覆盖八条 RV32M 指令，Rename/Dispatch 路由测试直接检查 MUL、DIV 两个代表，独立算术测试覆盖有符号/无符号变体及边界情况。内部 reference 差分验证仍不能替代外部 ISA compliance 或 Spike/RVFI 验证。
 
 运行当前全部测试：
 
@@ -488,6 +497,13 @@ make CAD_ENV=/path/to/env.sh check-pipeline
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-core-differential
+```
+
+分别通过原始 memory port 和 split L1 cache 运行 reference core 与 OoO core 的差分回归：
+
+```bash
+make CAD_ENV=/path/to/env.sh test-ooo-differential
+make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
 ```
 
 运行独立 I-cache 以及 pipeline/OoO L1 wrapper 集成测试：

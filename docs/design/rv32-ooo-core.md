@@ -23,12 +23,13 @@ single-dispatch、single-issue 的整数乱序核心：指令可以按照 operan
 以下能力尚未接入 OoO core：
 
 - 允许提前 Load 的 memory scheduling、LSQ 和 store-to-load forwarding；
-- OoO core 与 reference core 的 commit-level differential regression；
 - superscalar Dispatch/Issue、advanced branch prediction 和 L2 cache。
 
 RV32M 和单请求 LSU 均已连接到 backend/core，并有独立单元测试和 core-level 定向程序。
 `rv32_ooo_core` 仍保留原始 instruction/data memory port，既可直连 memory model，也可由
 `rv32_ooo_l1_top` 连接现有 I-cache/D-cache；两种顶层使用相同的 architectural Commit interface。
+`tb/core/rv32_ooo_differential_tb.sv` 在两种配置下分别运行 reference core 和 OoO core，
+并按退休顺序比较 architectural Commit event。
 
 ## 2. 数据流
 
@@ -234,24 +235,29 @@ response 分别受阻时的保持行为。它使用 `rv32_simple_memory`，不�
 Core-level 程序当前使用 MUL 和 DIV，不是八条 RV32M 指令逐一运行的集成测试。
 Decoder 单元测试覆盖八条指令；Rename/Dispatch 单元测试直接检查 MUL、DIV 两个代表的
 分类和字段传递。独立 multiplier/divider 测试覆盖算术变体、除零和 signed overflow。
-这里也没有穷举所有控制流和 trap encoding，
-尚不构成完整 ISA compliance 或 OoO/reference 差分验证。
+OoO/reference 差分回归使用 11 个定向程序覆盖算术边界、控制流、访存宽度、RV32M、
+illegal instruction、未对齐和 access fault，并分别运行 raw memory port 与 split-L1 配置。
+这些测试仍未穷举所有控制流和 trap encoding，也不能替代外部 ISA compliance 或
+Spike/RVFI 验证。
 
 单独运行 OoO execution 和 memory 测试：
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-ooo-lsu
 make CAD_ENV=/path/to/env.sh test-ooo-rv32m test-ooo-core test-ooo-memory test-ooo-l1
+make CAD_ENV=/path/to/env.sh test-ooo-differential
+make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
 ```
 
 `test-ooo-lsu` 验证单请求 LSU 的格式、异常、backpressure 和 Flush；
 `test-ooo-memory` 验证 Decode 到 architectural Commit 的完整访存路径；`test-ooo-l1` 验证
 相同 OoO core 通过分离式 blocking L1 cache 完成 refill、hit、dirty eviction 和 Commit。
+两个 differential target 分别验证原始 memory port 和 split-L1 路径的 Commit 序列。
 `compile-ooo-rv32m` 和 `compile-ooo-core` 只构建仿真程序，对应的 `test-*` target 才会执行。
 这些测试都已包含在默认 `make test` 中。工具已在 PATH 中时可以省略 `CAD_ENV`。
 
 ## 8. Next Integration Stages
 
-1. O7：让 OoO core 与 reference core 使用独立 memory image，按 Commit 顺序差分；
+1. 接入 ELF/hex image 与外部 ISA reference model，扩大软件验证范围；
 2. 在稳定 baseline 上研究 early load、LSQ 和 store-to-load forwarding；
 3. 在明确 memory protocol 后接入 unified L2 cache。
