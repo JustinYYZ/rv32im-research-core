@@ -195,6 +195,15 @@ OOO_MEMORY_SRCS := $(filter-out tb/core/rv32_ooo_core_tb.sv,$(OOO_CORE_SRCS)) \
 	tb/model/rv32_simple_memory.sv \
 	tb/core/rv32_ooo_memory_tb.sv
 
+OOO_L1_TEST := $(BUILD_DIR)/rv32_ooo_l1_tb
+OOO_L1_SRCS := $(filter-out tb/core/rv32_ooo_core_tb.sv,$(OOO_CORE_SRCS)) \
+	rtl/pkg/rv32_cache_pkg.sv \
+	rtl/cache/rv32_icache.sv \
+	rtl/cache/rv32_dcache.sv \
+	rtl/core/rv32_ooo_l1_top.sv \
+	tb/model/rv32_simple_memory.sv \
+	tb/cache/rv32_ooo_l1_tb.sv
+
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
 	rtl/pkg/rv32_pkg.sv \
@@ -521,9 +530,9 @@ DCACHE_SRCS := \
 .PHONY: compile-core-differential test-core-differential
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
-.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core test-ooo-memory
+.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core test-ooo-memory compile-ooo-l1 test-ooo-l1
 
-test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-lsu test-ooo-rv32m test-ooo-integer test-ooo-core test-ooo-memory test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
+test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-lsu test-ooo-rv32m test-ooo-integer test-ooo-core test-ooo-memory test-ooo-l1 test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-icache test-pipeline-l1 test-dcache
 
 test-alu: $(ALU_TEST)
@@ -668,6 +677,17 @@ $(OOO_MEMORY_TEST): $(OOO_MEMORY_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_memory_tb -o $@ $(OOO_MEMORY_SRCS)'
+
+# Exercise the OoO core through separate blocking L1 instruction/data caches.
+compile-ooo-l1: $(OOO_L1_TEST)
+
+test-ooo-l1: $(OOO_L1_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $<'
+
+$(OOO_L1_TEST): $(OOO_L1_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_l1_tb -o $@ $(OOO_L1_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)
@@ -1003,6 +1023,6 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
-	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_LSU_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(OOO_MEMORY_TEST) $(ISSUE_QUEUE_TEST)
+	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_LSU_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(OOO_MEMORY_TEST) $(OOO_L1_TEST) $(ISSUE_QUEUE_TEST)
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(FREE_LIST_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
 		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)

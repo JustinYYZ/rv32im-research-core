@@ -72,24 +72,22 @@ flowchart LR
     COMMIT --> RAT
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
-    classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
-    class L1I,L1D partial
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
     class L2 planned
     class MEM external
 ```
 
-Green nodes form the integrated OoO integer/control-flow, MUL/DIV, ordered-memory, and shared-completion paths. Amber caches are implemented and tested elsewhere in the repository, but their OoO integration remains pending. Gray identifies planned structures, while blue identifies the external memory environment.
+Green nodes form the integrated OoO integer/control-flow, MUL/DIV, ordered-memory, shared-completion, and separate blocking L1-cache paths. Gray identifies planned structures, while blue identifies the external memory environment.
 
-The design currently provides two complete RV32IM cores and one integrated partial OoO core:
+The design currently provides three RV32IM core implementations:
 
 1. `rv32_reference_core`: implemented multicycle in-order architectural reference;
 2. `rv32_pipeline_core`: implemented five-stage in-order performance baseline;
 3. `rv32_ooo_core`: integrated single-dispatch/single-issue OoO core with RV32IM execution, ROB-Head-only memory scheduling, in-order retirement, branch recovery, and precise synchronous traps.
 
-The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. L1 integration and OoO/reference differential verification remain planned. All cores share the same external memory and architectural commit interface.
+The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. `rv32_ooo_l1_top` connects the core to separate blocking instruction and data caches without changing its architectural commit interface. OoO/reference differential verification remains planned.
 
 ### Verification Strategy
 
@@ -102,7 +100,7 @@ Verification is developed together with the RTL:
 - implemented reference/pipeline commit differential checking; OoO/reference comparison remains planned;
 - planned Spike comparison through an RVFI-like retirement interface;
 - Verilator lint and Yosys synthesis sanity checks;
-- implemented L1 cache regressions covering hit, miss, refill, replacement, masked stores, dirty writeback, backpressure, and access errors.
+- implemented standalone and core-integrated L1 cache regressions covering hit, miss, refill, replacement, masked stores, dirty writeback, backpressure, and access errors.
 
 Correctness is established before IPC, frequency, or area optimizations are evaluated.
 
@@ -139,7 +137,7 @@ scripts/             reserved for project automation beyond the Makefile
 
 ### Project Status
 
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Both L1 caches are integrated with the pipeline through a dedicated wrapper. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. OoO L1 integration, unified L2, and OoO differential verification remain planned. Implemented components include:
+The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Dedicated wrappers connect the separate L1 caches to both the pipeline and the OoO core. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. Unified L2 and OoO differential verification remain planned. Implemented components include:
 
 - shared RV32I control types and instruction opcodes;
 - combinational integer ALU;
@@ -158,6 +156,7 @@ The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking
 - a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
 - a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
 - a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
+- an OoO-plus-separate-L1 integration top with a directed regression covering instruction/data refill, same-line hits, Store-hit visibility, same-set conflict replacement, dirty writeback, Commit results, and precise ECALL halt;
 - an eight-entry Fetch Queue with ready/valid flow control, FIFO ordering, full-Queue simultaneous replacement, explicit pointer wraparound, instruction-fault metadata, and recovery Flush;
 - a single-request out-of-order instruction frontend with I-cache backpressure, Fetch Queue flow control, sequential PC generation, redirect recovery, epoch-based stale-response rejection, and instruction-access-fault metadata;
 - a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
@@ -228,11 +227,12 @@ Run the reference-versus-pipeline commit differential test with:
 make CAD_ENV=/path/to/env.sh test-core-differential
 ```
 
-Run the standalone I-cache regression and the pipeline L1-wrapper regression with:
+Run the standalone I-cache regression and the pipeline/OoO L1-wrapper regressions with:
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-icache
 make CAD_ENV=/path/to/env.sh test-pipeline-l1
+make CAD_ENV=/path/to/env.sh test-ooo-l1
 ```
 
 Run the standalone L1 D-cache regression with:
@@ -254,6 +254,7 @@ make CAD_ENV=/path/to/env.sh test-ooo-divider
 make CAD_ENV=/path/to/env.sh test-ooo-integer
 make CAD_ENV=/path/to/env.sh test-ooo-core
 make CAD_ENV=/path/to/env.sh test-ooo-rv32m
+make CAD_ENV=/path/to/env.sh test-ooo-memory
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list
@@ -336,24 +337,22 @@ flowchart LR
     COMMIT --> RAT
     COMMIT --> ARF["Architectural State"]
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
-    classDef partial fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE implemented
-    class L1I,L1D partial
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
     class L2 planned
     class MEM external
 ```
 
-绿色节点组成当前已经接通的 OoO 整数、控制流、乘除法、顺序访存和统一完成广播路径。黄色的 cache 已在仓库其他部分实现并测试，但尚未接入 OoO core；灰色节点仍处于规划阶段；蓝色节点表示外部 memory 环境。
+绿色节点组成当前已经接通的 OoO 整数、控制流、乘除法、顺序访存、统一完成广播和分离式 blocking L1 cache 路径；灰色节点仍处于规划阶段；蓝色节点表示外部 memory 环境。
 
-项目目前包含两个完整 RV32IM core 和一个已经接通的部分 OoO core：
+项目目前包含三种 RV32IM core 实现：
 
 1. `rv32_reference_core`：已实现的多周期顺序 architectural reference；
 2. `rv32_pipeline_core`：已实现的五级顺序流水线性能 baseline；
 3. `rv32_ooo_core`：已接通的单 Dispatch、单 Issue OoO core，支持 RV32IM 执行、仅 ROB Head 可发射的访存调度、顺序退休、分支恢复和精确同步异常。
 
-当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。L1 接入以及 OoO/reference 差分验证仍待实现。所有 core 共用相同的外部 memory interface 和 architectural commit interface。
+当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。`rv32_ooo_l1_top` 在不改变 architectural commit interface 的前提下，将 core 接到分离式 blocking instruction/data cache。OoO/reference 差分验证仍待实现。
 
 ### 验证方法
 
@@ -366,7 +365,7 @@ flowchart LR
 - 已实现 reference/pipeline 逐条 Commit 差分比较；OoO/reference 比较仍待接入；
 - 计划通过 RVFI-like retirement interface 与 Spike 比较；
 - Verilator lint 和 Yosys synthesis sanity check；
-- 已实现的 L1 cache regression，覆盖 hit、miss、refill、replacement、masked store、dirty writeback、backpressure 和 access error。
+- 已实现独立和 core 集成层级的 L1 cache regression，覆盖 hit、miss、refill、replacement、masked store、dirty writeback、backpressure 和 access error。
 
 项目会先证明正确性，再评估 IPC、频率和面积优化。
 
@@ -402,7 +401,7 @@ scripts/             为 Makefile 之外的自动化脚本预留
 
 ### 当前状态
 
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。两个 L1 cache 已经通过独立 wrapper 接入 pipeline。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。OoO L1 接入、Unified L2 和 OoO 差分验证仍待实现。当前已实现内容包括：
+RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。独立 wrapper 已将两个 L1 cache 分别接入 pipeline 和 OoO core。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。Unified L2 和 OoO 差分验证仍待实现。当前已实现内容包括：
 
 - 公共 RV32I 控制类型与指令 opcode；
 - 组合逻辑整数 ALU；
@@ -420,6 +419,7 @@ RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-ma
 - 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
 - pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
 - 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
+- OoO + separate L1 集成顶层及定向 regression，覆盖 instruction/data refill、同一 line 命中、Store hit 后可见性、同 Set 冲突替换、dirty writeback、Commit 结果和精确 ECALL halt；
 - 8-entry Fetch Queue，支持 ready/valid flow control、FIFO 顺序、满队列同周期替换、显式指针回绕、取指错误信息和 recovery Flush；
 - 单请求 OoO 取指前端，支持 I-cache backpressure、Fetch Queue flow control、顺序 PC 生成、redirect recovery、基于 epoch 的旧响应丢弃和 instruction access fault 信息传递；
 - 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
@@ -490,11 +490,12 @@ make CAD_ENV=/path/to/env.sh check-pipeline
 make CAD_ENV=/path/to/env.sh test-core-differential
 ```
 
-运行独立 I-cache 和 pipeline L1 wrapper 集成测试：
+运行独立 I-cache 以及 pipeline/OoO L1 wrapper 集成测试：
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-icache
 make CAD_ENV=/path/to/env.sh test-pipeline-l1
+make CAD_ENV=/path/to/env.sh test-ooo-l1
 ```
 
 运行独立 L1 D-cache regression：
@@ -516,6 +517,7 @@ make CAD_ENV=/path/to/env.sh test-ooo-divider
 make CAD_ENV=/path/to/env.sh test-ooo-integer
 make CAD_ENV=/path/to/env.sh test-ooo-core
 make CAD_ENV=/path/to/env.sh test-ooo-rv32m
+make CAD_ENV=/path/to/env.sh test-ooo-memory
 make CAD_ENV=/path/to/env.sh test-phys-regfile
 make CAD_ENV=/path/to/env.sh test-rename-map
 make CAD_ENV=/path/to/env.sh test-free-list

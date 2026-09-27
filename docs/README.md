@@ -10,8 +10,8 @@ independently.
   payloads, hazard handling, forwarding, blocking operations, precise traps,
   and regression scope.
 - [Out-of-order core](design/rv32-ooo-core.md): integrated integer/control-flow,
-  RV32M, and ordered-memory paths, shared completion arbitration, rename/retirement invariants,
-  recovery, precise traps, regression commands, and remaining integration stages.
+  RV32M, ordered-memory, and separate blocking L1-cache paths, shared completion arbitration,
+  rename/retirement invariants, recovery, precise traps, regression commands, and remaining stages.
 
 ## Verification
 
@@ -37,8 +37,9 @@ Curated, reproducible summaries may be added directly under `docs/results/`.
 
 - [五级流水线](design/rv32-pipeline-core.md)：当前实现的 stage payload、hazard、
   forwarding、blocking operation、精确异常和回归范围。
-- [乱序执行核心](design/rv32-ooo-core.md)：已接通的整数/控制流、RV32M 与顺序访存路径、
-  共享 completion 仲裁、rename/retirement invariant、恢复、精确异常、回归命令和后续集成边界。
+- [乱序执行核心](design/rv32-ooo-core.md)：已接通的整数/控制流、RV32M、顺序访存与
+  分离式 blocking L1 cache 路径、共享 completion 仲裁、rename/retirement invariant、恢复、
+  精确异常、回归命令和后续集成边界。
 
 ## 验证资料
 

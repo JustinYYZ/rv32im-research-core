@@ -17,22 +17,25 @@ single-dispatch、single-issue 的整数乱序核心：指令可以按照 operan
 - Branch/JAL/JALR actual-next-PC 解析及退休时错误预测恢复；
 - instruction/data access fault、地址未对齐、illegal instruction、ECALL 和 EBREAK 的精确异常 metadata；
 - ROB-Head-only Load/Store、外部 data-memory port 和访存 Commit record；
+- 通过 `rv32_ooo_l1_top` 接入分离式 blocking L1 instruction/data cache；
 - trap 退休后的 sticky halt。
 
 以下能力尚未接入 OoO core：
 
-- OoO core 的 L1 instruction/data cache 接入，以及允许提前 Load 的 LSQ；
+- 允许提前 Load 的 memory scheduling、LSQ 和 store-to-load forwarding；
 - OoO core 与 reference core 的 commit-level differential regression；
-- superscalar Dispatch/Issue、advanced branch prediction、LSQ 和 L2 cache。
+- superscalar Dispatch/Issue、advanced branch prediction 和 L2 cache。
 
 RV32M 和单请求 LSU 均已连接到 backend/core，并有独立单元测试和 core-level 定向程序。
-现有 L1 cache 仍只接入 pipeline；OoO 集成测试的 instruction/data port 都直连 memory model。
+`rv32_ooo_core` 仍保留原始 instruction/data memory port，既可直连 memory model，也可由
+`rv32_ooo_l1_top` 连接现有 I-cache/D-cache；两种顶层使用相同的 architectural Commit interface。
 
 ## 2. 数据流
 
 ```mermaid
 flowchart LR
-    IMEM[Instruction memory] --> FE[Frontend]
+    IMEM[Instruction memory] <--> L1I[L1 I-cache]
+    L1I <--> FE[Frontend]
     FE --> FQ[Fetch Queue]
     FQ --> DEC[Decode]
     DEC --> REN[Rename / Dispatch]
@@ -48,7 +51,8 @@ flowchart LR
     PRF --> MUL
     PRF --> DIV
     PRF --> LSU
-    LSU <--> DMEM[Data memory]
+    LSU <--> L1D[L1 D-cache]
+    L1D <--> DMEM[Data memory]
     EX --> CB[Completion Buffer]
     CB --> CDB[Round-robin CDB]
     MUL --> CDB
@@ -222,6 +226,11 @@ OoO multiplier regression 验证固定延迟 metadata 对齐、连续四请求�
 DIV 前后的 ROB-Head-only 请求、错误路径 Store、地址未对齐与 access fault，以及 request 和
 response 分别受阻时的保持行为。它使用 `rv32_simple_memory`，不是 L1 cache 测试。
 
+`tb/cache/rv32_ooo_l1_tb.sv` 通过 `rv32_ooo_l1_top` 检查 instruction/data refill、同一 line
+命中、Store hit 后的读取、同 Set 冲突、dirty victim writeback、逐条 Commit、ECALL 和 halt。
+测试同时统计 backing-memory data request，确认一次 cold refill 和一次 conflict refill 共形成
+8 次 word read，而一次16-byte dirty line 写回形成4次 word write。
+
 Core-level 程序当前使用 MUL 和 DIV，不是八条 RV32M 指令逐一运行的集成测试。
 Decoder 单元测试覆盖八条指令；Rename/Dispatch 单元测试直接检查 MUL、DIV 两个代表的
 分类和字段传递。独立 multiplier/divider 测试覆盖算术变体、除零和 signed overflow。
@@ -232,16 +241,17 @@ Decoder 单元测试覆盖八条指令；Rename/Dispatch 单元测试直接检�
 
 ```bash
 make CAD_ENV=/path/to/env.sh test-ooo-lsu
-make CAD_ENV=/path/to/env.sh test-ooo-rv32m test-ooo-core test-ooo-memory
+make CAD_ENV=/path/to/env.sh test-ooo-rv32m test-ooo-core test-ooo-memory test-ooo-l1
 ```
 
 `test-ooo-lsu` 验证单请求 LSU 的格式、异常、backpressure 和 Flush；
-`test-ooo-memory` 验证 Decode 到 architectural Commit 的完整访存路径。
+`test-ooo-memory` 验证 Decode 到 architectural Commit 的完整访存路径；`test-ooo-l1` 验证
+相同 OoO core 通过分离式 blocking L1 cache 完成 refill、hit、dirty eviction 和 Commit。
 `compile-ooo-rv32m` 和 `compile-ooo-core` 只构建仿真程序，对应的 `test-*` target 才会执行。
 这些测试都已包含在默认 `make test` 中。工具已在 PATH 中时可以省略 `CAD_ENV`。
 
 ## 8. Next Integration Stages
 
-1. O6 后续：把现有 L1 cache 接到 OoO core，保留相同的外部 Commit 语义；
-2. O7：让 OoO core 与 reference core 使用独立 memory image，按 Commit 顺序差分；
-3. 在稳定 baseline 上研究 early load、LSQ 和 store-to-load forwarding。
+1. O7：让 OoO core 与 reference core 使用独立 memory image，按 Commit 顺序差分；
+2. 在稳定 baseline 上研究 early load、LSQ 和 store-to-load forwarding；
+3. 在明确 memory protocol 后接入 unified L2 cache。
