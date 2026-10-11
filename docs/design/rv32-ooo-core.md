@@ -237,8 +237,8 @@ Decoder 单元测试覆盖八条指令；Rename/Dispatch 单元测试直接检�
 分类和字段传递。独立 multiplier/divider 测试覆盖算术变体、除零和 signed overflow。
 OoO/reference 差分回归使用 11 个定向程序覆盖算术边界、控制流、访存宽度、RV32M、
 illegal instruction、未对齐和 access fault，并分别运行 raw memory port 与 split-L1 配置。
-这些测试仍未穷举所有控制流和 trap encoding，也不能替代外部 ISA compliance 或
-Spike/RVFI 验证。
+这些测试仍未穷举所有控制流和 trap encoding。外部离线 Spike suite 已验证六个 benchmark；
+这仍不等于完整 ISA compliance 或在线 RVFI 验证。
 
 单独运行 OoO execution 和 memory 测试：
 
@@ -256,8 +256,14 @@ make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
 `compile-ooo-rv32m` 和 `compile-ooo-core` 只构建仿真程序，对应的 `test-*` target 才会执行。
 这些测试都已包含在默认 `make test` 中。工具已在 PATH 中时可以省略 `CAD_ENV`。
 
-## 8. Next Integration Stages
+## 8. Version Boundary and Reproducible Results
 
-1. 接入 ELF/hex image 与外部 ISA reference model，扩大软件验证范围；
-2. 在稳定 baseline 上研究 early load、LSQ 和 store-to-load forwarding；
-3. 在明确 memory protocol 后接入 unified L2 cache。
+当前版本以 RV32IM 单发射 OoO + split L1 为范围。ELF image、高地址 benchmark memory、
+halt/ROI monitor 和离线 Spike 差分已接通；六个外部 RV32IM 工作负载 从启动到首次 halt
+的退休行为全部匹配。公开结果见 [benchmark baseline](../results/ooo-l1-baseline.md)、
+[Spike 检查范围](../verification/rv32-spike-verification.md) 和
+[核心综合时序](../results/ooo-core-timing.md)。
+
+LSQ、early load、forwarding、advanced prediction、在线完整 RVFI 和 unified L2 留作后续工作。
+当前同步异常采用 halt-after-trap，没有 privileged trap handler；外部 benchmark suite 不验证
+该特权级行为。L1 SRAM macro 与含 cache 系统的完整物理实现不属于这次核心时序测量。

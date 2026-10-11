@@ -14,6 +14,7 @@ obj_dir/
 *.so
 *.elf
 *.hex
+*.memh
 *.bin
 *.map
 *.vvp
@@ -21,6 +22,7 @@ obj_dir/
 # Synthesis and implementation output
 reports/generated/
 results/generated/
+docs/results/generated/
 *.json
 *.blif
 *.sdf

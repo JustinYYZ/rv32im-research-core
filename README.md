@@ -6,49 +6,28 @@
 
 ### Overview
 
-RV32IM Research Core is a synthesizable RISC-V processor project developed in SystemVerilog. The
-project uses an in-order implementation as a verified architectural baseline, then extends the
-same ISA and commit interface toward pipelined and out-of-order microarchitectures.
+RV32IM Research Core is a SystemVerilog processor project for bare-metal execution and microarchitecture experiments. It includes a multicycle reference core, a five-stage in-order pipeline, and a single-dispatch/single-issue out-of-order (OoO) core, with a common architectural commit interface for differential verification.
 
-All functional HDL implementation is completed by the author. AI assistance through OpenAI
-Codex using GPT-5.6-sol is limited to Markdown documentation, Makefile maintenance, and
-explanations, debugging suggestions, or development guidance when difficulties arise.
+The current baseline integrates register renaming, dynamic issue, out-of-order completion, in-order retirement, recovery, RV32M arithmetic, and separate L1 instruction/data caches. Loads and stores issue only at the reorder-buffer (ROB) head; more aggressive memory scheduling is future work.
 
-The project focuses on three goals:
+| Implementation | Role |
+|---|---|
+| `rv32_reference_core` | Multicycle in-order reference |
+| `rv32_pipeline_core` | Five-stage in-order implementation |
+| `rv32_ooo_core` | Single-dispatch/single-issue OoO implementation |
+| `rv32_pipeline_l1_top` / `rv32_ooo_l1_top` | Pipeline/OoO integration with split L1 caches |
 
-- understanding the complete path from RISC-V instruction semantics to RTL;
-- building a reusable verification environment based on architectural commit behavior;
-- evaluating microarchitectural tradeoffs with simulation, synthesis, and timing data.
+The OoO configuration has a 16-entry ROB, 64 physical registers, an eight-entry issue queue, and an eight-entry fetch queue. Each L1 is a parameterized 32 KiB direct-mapped blocking cache with 32-byte lines; the D-cache uses write-back and write-allocate.
 
-### Target Scope
+See [FEATURES.md](FEATURES.md#english) for the complete component inventory, verification coverage, and focused test commands.
 
-The planned processor scope is:
-
-- RV32IM integer instruction set;
-- 32-bit integer registers and byte-addressed memory;
-- little-endian bare-metal execution;
-- synthesizable SystemVerilog;
-- in-order reference core;
-- five-stage in-order pipeline;
-- separate L1 instruction and data caches;
-- unified L2 cache;
-- register renaming, physical register file, reorder buffer, and an issue queue;
-- out-of-order execution with in-order retirement;
-- commit-level differential verification;
-- synthesis and timing evaluation with Yosys and OpenROAD.
-
-The initial scope does not include virtual memory, Linux, multicore coherence, superscalar issue,
-or the A/F/D/C/V extensions. Unsupported features are documented explicitly rather than being
-treated as implemented behavior.
-
-### Planned Architecture
+### Architecture
 
 ```mermaid
 flowchart LR
     PC --> FETCH[Fetch]
     FETCH <--> L1I["L1 I-cache"]
-    L1I <--> L2["Unified L2 cache"]
-    L2 <--> MEM[Memory]
+    L1I <--> MEM[Memory]
     FETCH --> FQ["Fetch Queue"]
     FQ --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
@@ -62,7 +41,7 @@ flowchart LR
     IQ --> MULDIV["MUL / DIV"]
     IQ --> LSU[LSU]
     LSU <--> L1D["L1 D-cache"]
-    L1D <--> L2
+    L1D <--> MEM
     ALU --> COMPLETE["CDB Arbitration"]
     MULDIV --> COMPLETE
     LSU --> COMPLETE
@@ -70,211 +49,69 @@ flowchart LR
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
     COMMIT --> RAT
-    COMMIT --> ARF["Architectural State"]
+    COMMIT --> FL
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
-    classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
-    class L2 planned
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
     class MEM external
 ```
 
-Green nodes form the integrated OoO integer/control-flow, MUL/DIV, ordered-memory, shared-completion, and separate blocking L1-cache paths. Gray identifies planned structures, while blue identifies the external memory environment.
+Green nodes are integrated components; blue is the external memory environment. Arithmetic operations can execute out of order, while memory issue and architectural retirement remain ordered.
 
-The design currently provides three RV32IM core implementations:
+### Measured baseline
 
-1. `rv32_reference_core`: implemented multicycle in-order architectural reference;
-2. `rv32_pipeline_core`: implemented five-stage in-order performance baseline;
-3. `rv32_ooo_core`: integrated single-dispatch/single-issue OoO core with RV32IM execution, ROB-Head-only memory scheduling, in-order retirement, branch recovery, and precise synchronous traps.
+| Measurement | Result |
+|---|---|
+| External correctness | Six RV32IM workloads passed offline Spike comparison; 3,652,225 retirement events compared |
+| Workload IPC | 0.208373–0.296710 in the measured regions of interest |
+| Core-only timing | 200 MHz target met; worst setup slack +0.5010 ns |
+| Mapped core area | 98,060.368 µm², 50,304 standard cells |
 
-The OoO core executes RV32I ALU/control-flow and load/store instructions plus RV32M operations. ALU, buffered multiplier, single-request divider, and ordered LSU producers share a four-input round-robin CDB arbiter for PRF writeback, ROB completion, and dependent wakeup. `rv32_ooo_l1_top` connects the core to separate blocking instruction and data caches without changing its architectural commit interface. Commit-level differential regressions compare both the raw OoO core and the L1-connected configuration against the reference core.
+IPC is instructions per cycle, measured with split L1 caches and the documented simulation-memory configuration. The timing result uses Nangate45 typical, estimated post-placement parasitics, and an ideal clock; it excludes L1 caches and is pre-clock-tree/pre-route. The tested clock target is not an identified maximum frequency or a final system frequency. The area is mapped cell area, not die area.
 
-### Verification Strategy
+[Workload results](docs/results/ooo-l1-baseline.md) · [Timing constraints and critical path](docs/results/ooo-core-timing.md) · [Spike comparison scope](docs/verification/rv32-spike-verification.md)
 
-Verification is developed together with the RTL:
+### Quick start
 
-- directed unit tests for decoder, ALU, architectural and physical register files, Fetch Queue, rename maps, physical-register allocation, branch, LSU, mul/div, ROB, and Issue Queue behavior;
-- instruction-level assembly tests;
-- randomized instruction and memory-response latency tests;
-- a common architectural commit trace;
-- implemented reference/pipeline and reference/OoO commit differential checking;
-- planned Spike comparison through an RVFI-like retirement interface;
-- Verilator lint and Yosys synthesis sanity checks;
-- implemented standalone and core-integrated L1 cache regressions covering hit, miss, refill, replacement, masked stores, dirty writeback, backpressure, and access errors.
+The simulation flow uses Icarus Verilog. Python 3 and a RISC-V bare-metal GCC/binutils toolchain are needed for software images; Spike is needed for independent ISA comparison. Verilator is an alternative benchmark engine. Core synthesis/timing requires Yosys with the slang frontend, OpenROAD, and the Nangate45 platform files.
 
-Correctness is established before IPC, frequency, or area optimizations are evaluated.
+With tools on PATH:
 
-### Research Direction
+```bash
+# Directed unit, integration, and internal commit-differential regressions
+make BUILD_DIR=/tmp/rv32-test test
 
-The main planned study compares conservative memory scheduling with more aggressive load
-scheduling in a small out-of-order core:
+# Independent Spike comparison on a repository-owned C test
+make BUILD_DIR=/tmp/rv32-spike test-spike PROGRAM=sw/tests/smoke.c SPIKE=/path/to/spike
 
-- loads and stores restricted to the ROB head;
-- early loads when older memory operations are known not to conflict;
-- a load/store queue with store-to-load forwarding.
+# Reproduce the core-only timing target
+make BUILD_DIR=/tmp/rv32-sta sta-ooo NANGATE45_DIR=/path/to/Nangate45 OOO_PERIOD=5
+```
 
-The comparison will use retired-instruction count, cycle count, IPC, memory-stall cycles, cache
-miss rates, synthesis area, and critical-path timing.
+Supply `CAD_ENV=/path/to/env.sh` when a simulation/CAD tool environment needs initialization. The [feature inventory](FEATURES.md#english) lists focused tests and the six-workload batch command. External workload binaries are local inputs and are not redistributed; their measurement conditions are recorded in the results report.
 
-### Repository Layout
+### Scope and next directions
+
+This is an RV32IM little-endian bare-metal baseline, not a privileged operating-system platform. Synchronous exceptions are reported precisely and halt the core; no privileged trap handler, virtual memory, Linux, or multicore coherence is implemented. FENCE.I and the A/F/D/C/V extensions are not supported.
+
+Unified L2, a load/store queue with early loads and store-to-load forwarding, advanced branch prediction, superscalar issue, full ISA compliance certification, and physical signoff remain outside this version. These are extension directions, not claims about the measured baseline.
+
+### Repository and documentation
 
 ```text
-rtl/                 synthesizable processor RTL
-  pkg/               ISA constants, shared types, and interfaces
-  frontend/          decode, immediate generation, and fetch logic
-  core/              reference, pipeline, OoO, and system top levels
-  pipeline/          pipeline registers, forwarding, and hazard control
-  backend/           regfile, ALU, mul/div, rename, ROB, and scheduling
-  cache/             implemented L1 caches; future L2 and adapters
-  memory/            reserved for shared external-memory protocol RTL
-
-tb/                  unit, core, and model testbenches
-sw/                  reserved for bare-metal tests and benchmarks
-docs/                indexed design, verification, and result documents
-scripts/             reserved for project automation beyond the Makefile
-.github/workflows/    reserved for continuous-integration jobs
+rtl/         Processor RTL, shared types, and L1 caches
+tb/          Unit/integration testbenches and simulation memory models
+sw/          Bare-metal startup, linker script, and test programs
+scripts/     ELF conversion, Spike comparison, synthesis, and timing tools
+docs/        Design notes, verification references, and measured results
+FEATURES.md  Detailed component inventory and test commands
 ```
 
-### Project Status
-
-The RV32IM multicycle reference core, five-stage in-order pipeline, and blocking direct-mapped L1 instruction and data caches are implemented and covered by self-checking regressions. Dedicated wrappers connect the separate L1 caches to both the pipeline and the OoO core. The current `rv32_ooo_core` connects its frontend, decoder, rename/scheduling backend, ALU/control-flow, RV32M and ordered data-memory execution, shared CDB, in-order retirement, misprediction recovery, and precise synchronous traps. Commit-level reference/OoO differential verification is implemented for both raw memory ports and the split-L1 wrapper; unified L2 remains planned. Implemented components include:
-
-- shared RV32I control types and instruction opcodes;
-- combinational integer ALU;
-- combinational RV32I branch-condition unit;
-- 32 × 32-bit architectural register file with two read ports and one write port;
-- I-, S-, B-, U-, and J-type immediate generation;
-- decoder support for all RV32I register-register and immediate ALU
-  instructions, conditional branches, JAL, JALR, loads, and stores, plus LUI,
-  AUIPC, and decode events for ECALL, EBREAK, FENCE, and FENCE.TSO; FENCE.I is
-  not supported;
-- a combinational load/store formatting unit with address-alignment checks, store byte enables, and signed or unsigned load extension;
-- a three-stage RV32M multiplier using Radix-4 Booth recoding and a Wallace carry-save tree, with one-request-per-cycle throughput;
-- a single-request RV32M divider using 32-cycle Radix-2 restoring division, signed-magnitude preprocessing, and RISC-V-defined corner-case handling;
-- a multi-cycle in-order RV32IM reference core with blocking instruction/data interfaces, architectural commit reporting, system instructions, synchronous traps, and halt-after-trap behavior;
-- a five-stage RV32IM pipeline with valid-bit stage control, optional RAW stalling, EX/MEM and MEM/WB forwarding, branch/JAL/JALR recovery, blocking load/store operation, and multicycle RV32M integration;
-- a parameterized 32 KiB direct-mapped blocking L1 instruction cache with 32-byte lines, sequential word refill, request backpressure, atomic line installation, reset invalidation, and refill-error handling;
-- a pipeline-plus-separate-L1 integration top with regressions covering instruction refill and redirect recovery, data load/store commits, masked store merging, dirty eviction, access faults, and backing-memory request counts;
-- a parameterized 32 KiB direct-mapped blocking L1 data cache with masked store hits, write-allocate, dirty-victim writeback, sequential word transfers, request backpressure, atomic refill installation, and access-error recovery;
-- an OoO-plus-separate-L1 integration top with a directed regression covering instruction/data refill, same-line hits, Store-hit visibility, same-set conflict replacement, dirty writeback, Commit results, and precise ECALL halt;
-- an eight-entry Fetch Queue with ready/valid flow control, FIFO ordering, full-Queue simultaneous replacement, explicit pointer wraparound, instruction-fault metadata, and recovery Flush;
-- a single-request out-of-order instruction frontend with I-cache backpressure, Fetch Queue flow control, sequential PC generation, redirect recovery, epoch-based stale-response rejection, and instruction-access-fault metadata;
-- a 16-entry circular ROB with generation-tagged pointers, explicit occupancy, stored PC/instruction/destination payloads, tagged out-of-order result completion, stale-tag rejection, backpressured in-order retirement, and simultaneous allocation/retirement handling;
-- a 64-entry physical register file with two combinational data-read ports, two independent rename-readiness lookup ports, allocation-based readiness tracking, one completion writeback port, hardwired p0 behavior, and allocation priority on same-register collisions;
-- 32-entry speculative and committed rename maps with two source lookups, old-destination lookup, identity reset, fixed x0 mapping, and recovery that includes same-cycle retirement;
-- a 64-entry physical-register free list with lowest-index allocation, speculative and committed availability maps, retirement-based old-mapping release, fixed p0 exclusion, exhaustion backpressure, and recovery that includes same-cycle retirement;
-- an eight-entry, single-dispatch, single-issue queue with physical-tag wakeup, same-cycle Dispatch/CDB handling, functional-unit backpressure, deterministic lowest-slot selection, simultaneous Dispatch/Issue occupancy handling, and recovery Flush;
-- an atomic single-instruction Rename/Dispatch controller that allocates ROB and Issue Queue entries together with optional Free List, RAT, and PRF destination updates;
-- a combinational integer/control-flow Issue Stage with physical-register addressing, operand selection, branch comparison, actual-next-PC resolution, and completion backpressure;
-- a one-entry registered Completion Buffer carrying result and actual-next-PC metadata with stable retention, recovery Flush, and bubble-free consume-and-replace throughput;
-- a four-input round-robin CDB arbiter with single-winner downstream backpressure and fairness rotation;
-- a buffered OoO multiplier producer that aligns ROB/physical-register metadata with the pipelined result, reserves four outstanding credits, absorbs CDB backpressure, and discards queued or in-flight work on recovery;
-- a single-request OoO divider producer that retains instruction metadata, holds a completed result under CDB backpressure, and cancels active or buffered work on recovery;
-- an ordered one-request OoO LSU that issues only ROB-Head memory operations and preserves load/store completion, access-fault, and memory-commit metadata through CDB backpressure;
-- an integrated single-dispatch/single-issue OoO backend connecting Rename, Issue Queue, shared PRF reads, ALU/MUL/DIV/LSU producers, CDB writeback, ROB completion, RRAT/Free List updates, ordered retirement, branch recovery, and trap recovery;
-- integrated OoO core regressions covering integer/control-flow and RV32M execution, ordered load/store commits, subword formatting, memory faults and backpressure, wrong-path Store cancellation, precise ECALL retirement, and sticky halt;
-- precise synchronous pipeline traps for illegal instructions, ECALL, EBREAK, instruction/data misalignment, and instruction/data access faults, followed by sticky halt;
-- commit-level differential verification between the reference and pipeline cores using independent memory images and retirement-order comparison;
-- commit-level differential verification between the reference and OoO cores, with and without split L1 caches, covering RV32I/RV32M operations, control-flow recovery, subword memory behavior, misalignment, access faults, and final memory signatures;
-- directed unit, reference-core, pipeline, and OoO integration regressions covering the implemented paths.
-
-Core-level RV32M directed programs use MUL and DIV to check integration behavior. Decoder tests cover all eight RV32M operations; Rename/Dispatch routing tests directly check representative MUL and DIV operations. Standalone arithmetic tests cover signed/unsigned variants and corner cases. These checks and the internal reference differential suite are not a substitute for external ISA compliance or Spike/RVFI verification.
-
-Run the current regression with:
-
-```bash
-make test
-```
-
-If the simulation tools require an environment setup script:
-
-```bash
-make CAD_ENV=/path/to/env.sh test
-```
-
-Run decoder simulation, lint, and synthesis sanity checks together with:
-
-```bash
-make CAD_ENV=/path/to/env.sh check-decoder
-```
-
-Run the same checks for the multiplier with:
-
-```bash
-make CAD_ENV=/path/to/env.sh check-multiplier
-```
-
-Run the same checks for the iterative divider with:
-
-```bash
-make CAD_ENV=/path/to/env.sh check-divider
-```
-
-Run all reference-core simulations, lint, and synthesis sanity checks with:
-
-```bash
-make CAD_ENV=/path/to/env.sh check-reference-core
-```
-
-Run all pipeline unit and core-level regressions with:
-
-```bash
-make CAD_ENV=/path/to/env.sh check-pipeline
-```
-
-Run the reference-versus-pipeline commit differential test with:
-
-```bash
-make CAD_ENV=/path/to/env.sh test-core-differential
-```
-
-Run the reference-versus-OoO differential regressions on raw memory ports and through split L1 caches with:
-
-```bash
-make CAD_ENV=/path/to/env.sh test-ooo-differential
-make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
-```
-
-Run the standalone I-cache regression and the pipeline/OoO L1-wrapper regressions with:
-
-```bash
-make CAD_ENV=/path/to/env.sh test-icache
-make CAD_ENV=/path/to/env.sh test-pipeline-l1
-make CAD_ENV=/path/to/env.sh test-ooo-l1
-```
-
-Run the standalone L1 D-cache regression with:
-
-```bash
-make CAD_ENV=/path/to/env.sh test-dcache
-```
-
-Run the out-of-order frontend, backend structure, and core-integration regressions with:
-
-```bash
-make CAD_ENV=/path/to/env.sh test-fetch-queue
-make CAD_ENV=/path/to/env.sh test-ooo-frontend
-make CAD_ENV=/path/to/env.sh test-rename-dispatch
-make CAD_ENV=/path/to/env.sh test-ooo-execute
-make CAD_ENV=/path/to/env.sh test-cdb-arbiter
-make CAD_ENV=/path/to/env.sh test-ooo-multiplier
-make CAD_ENV=/path/to/env.sh test-ooo-divider
-make CAD_ENV=/path/to/env.sh test-ooo-integer
-make CAD_ENV=/path/to/env.sh test-ooo-core
-make CAD_ENV=/path/to/env.sh test-ooo-rv32m
-make CAD_ENV=/path/to/env.sh test-ooo-memory
-make CAD_ENV=/path/to/env.sh test-phys-regfile
-make CAD_ENV=/path/to/env.sh test-rename-map
-make CAD_ENV=/path/to/env.sh test-free-list
-make CAD_ENV=/path/to/env.sh test-issue-queue
-make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
-```
-
-- The [documentation index](docs/README.md) groups public design notes, verification references, and reproducible results.
+[Documentation index](docs/README.md) · [Pipeline design](docs/design/rv32-pipeline-core.md) · [OoO design](docs/design/rv32-ooo-core.md)
 
 ### License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE). External test inputs are not included in the project distribution.
 
 ---
 
@@ -282,46 +119,28 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ### 项目简介
 
-RV32IM Research Core 是一个使用 SystemVerilog 开发的可综合 RISC-V 处理器项目。
-项目先建立经过验证的顺序执行实现，作为 architectural baseline，再在相同 ISA
-和 commit interface 上逐步发展出流水线和乱序执行微架构。
+RV32IM Research Core 是一个面向裸机程序和微架构实验的 SystemVerilog 处理器项目，包含多周期顺序参考核、五级顺序流水线和单分派、单发射的乱序执行核心。三个实现使用公共的架构提交接口，便于按指令退休顺序进行差分验证。
 
-所有具有功能意义的 HDL 实现均由作者完成。AI 辅助使用 OpenAI Codex（GPT-5.6-sol），仅用于 Markdown 文档和 Makefile 的整理维护，并在开发遇到困难时提供原理讲解、调试建议和方向性指导。
+当前基线已经集成寄存器重命名、动态发射、乱序完成、顺序退休、恢复机制、RV32M 乘除法以及分离式 L1 指令和数据 cache。Load/Store 仅在重排序缓冲区（ROB）队首发射，更激进的访存调度留作后续扩展。
 
-项目主要关注三个目标：
+| 实现 | 用途 |
+|---|---|
+| `rv32_reference_core` | 多周期顺序参考核 |
+| `rv32_pipeline_core` | 五级顺序流水线 |
+| `rv32_ooo_core` | 单分派、单发射的乱序执行核心 |
+| `rv32_pipeline_l1_top` / `rv32_ooo_l1_top` | 流水线／OoO 与分离式 L1 的集成顶层 |
 
-- 理解从 RISC-V 指令语义到 RTL 数据通路的完整过程；
-- 建立基于 architectural commit behavior 的可复用验证环境；
-- 使用仿真、综合和时序数据研究微架构设计取舍。
+当前 OoO 配置使用 16 项 ROB、64 个物理寄存器、8 项发射队列和 8 项取指队列。两个 L1 均为参数化的 32 KiB 直接映射、阻塞式 cache，cache line 为 32 字节；D-cache 使用写回和写分配策略。
 
-### 目标范围
+完整组件说明、验证覆盖和分项测试命令见 [FEATURES.md](FEATURES.md#中文)。
 
-计划中的处理器范围包括：
-
-- RV32IM 整数指令集；
-- 32 位整数寄存器和 byte-addressed memory；
-- little-endian bare-metal 执行环境；
-- 可综合 SystemVerilog；
-- 顺序参考核；
-- 五级顺序流水线；
-- 分离的 L1 instruction/data cache；
-- unified L2 cache；
-- register renaming、physical register file、ROB 和 Issue Queue；
-- 乱序执行、顺序退休；
-- commit-level differential verification；
-- 使用 Yosys/OpenROAD 进行综合和时序实验。
-
-第一阶段不包含虚拟内存、Linux、多核一致性、超标量发射以及 A/F/D/C/V 扩展。
-所有未实现功能都会在文档中明确标注，不会被当作已经支持的行为。
-
-### 计划架构
+### 架构
 
 ```mermaid
 flowchart LR
     PC --> FETCH[Fetch]
     FETCH <--> L1I["L1 I-cache"]
-    L1I <--> L2["Unified L2 cache"]
-    L2 <--> MEM[Memory]
+    L1I <--> MEM[Memory]
     FETCH --> FQ["Fetch Queue"]
     FQ --> DECODE[Decode]
     DECODE --> RENAME["Rename / Dispatch"]
@@ -335,7 +154,7 @@ flowchart LR
     IQ --> MULDIV["MUL / DIV"]
     IQ --> LSU[LSU]
     LSU <--> L1D["L1 D-cache"]
-    L1D <--> L2
+    L1D <--> MEM
     ALU --> COMPLETE["CDB Arbitration"]
     MULDIV --> COMPLETE
     LSU --> COMPLETE
@@ -343,206 +162,66 @@ flowchart LR
     COMPLETE --> ROB
     ROB --> COMMIT[Commit]
     COMMIT --> RAT
-    COMMIT --> ARF["Architectural State"]
+    COMMIT --> FL
     classDef implemented fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
-    classDef planned fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:2px
     classDef external fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
-    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ARF,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
-    class L2 planned
+    class PC,FETCH,FQ,DECODE,ALU,MULDIV,LSU,COMMIT,ROB,PRF,RAT,FL,IQ,RENAME,COMPLETE,L1I,L1D implemented
     class MEM external
 ```
 
-绿色节点组成当前已经接通的 OoO 整数、控制流、乘除法、顺序访存、统一完成广播和分离式 blocking L1 cache 路径；灰色节点仍处于规划阶段；蓝色节点表示外部 memory 环境。
+绿色表示已集成的组件，蓝色表示外部存储器环境。算术操作可以乱序执行，访存发射和架构状态的退休仍保持顺序。
 
-项目目前包含三种 RV32IM core 实现：
+### 实测基线
 
-1. `rv32_reference_core`：已实现的多周期顺序 architectural reference；
-2. `rv32_pipeline_core`：已实现的五级顺序流水线性能 baseline；
-3. `rv32_ooo_core`：已接通的单 Dispatch、单 Issue OoO core，支持 RV32IM 执行、仅 ROB Head 可发射的访存调度、顺序退休、分支恢复和精确同步异常。
+| 测量项目 | 结果 |
+|---|---|
+| 外部正确性 | 六个 RV32IM 工作负载通过离线 Spike 差分，累计比较 3,652,225 条退休指令 |
+| 工作负载 IPC | 实际测量区间内为 0.208373–0.296710 |
+| 仅核心时序 | 200 MHz 目标通过，最差 setup slack 为 +0.5010 ns |
+| 核心映射面积 | 98,060.368 µm²，50,304 个标准单元 |
 
-当前 OoO core 可以执行 RV32I ALU、控制流、Load/Store 和 RV32M 指令。ALU、带缓冲的乘法、单请求除法和顺序 LSU 四个 producer 通过 round-robin CDB arbiter 共用 PRF 写回、ROB completion 和依赖唤醒路径。`rv32_ooo_l1_top` 在不改变 architectural commit interface 的前提下，将 core 接到分离式 blocking instruction/data cache。Commit-level 差分回归已经能够将原始 OoO core 和带 L1 的配置分别与 reference core 比较。
+IPC 表示每周期退休的指令数，来自包含分离式 L1 的仿真，存储器配置见结果报告。时序使用 Nangate45 typical、布局后估算寄生参数和理想时钟，排除两个 L1，尚未进行时钟树和布线。200 MHz 是已经验证的目标，不是测得的最高频率，也不是最终系统频率。面积为映射后的单元面积，不是芯片面积。
 
-### 验证方法
+[工作负载结果](docs/results/ooo-l1-baseline.md) · [时序约束与关键路径](docs/results/ooo-core-timing.md) · [Spike 检查范围](docs/verification/rv32-spike-verification.md)
 
-验证环境和 RTL 同步开发：
+### 快速运行
 
-- decoder、ALU、架构/物理寄存器文件、Fetch Queue、重命名映射表、物理寄存器分配、branch、LSU、mul/div、ROB 和 Issue Queue 单元测试；
-- 指令级汇编测试；
-- 随机指令和随机 memory response latency；
-- 统一 architectural commit trace；
-- 已实现 reference/pipeline 和 reference/OoO 逐条 Commit 差分比较；
-- 计划通过 RVFI-like retirement interface 与 Spike 比较；
-- Verilator lint 和 Yosys synthesis sanity check；
-- 已实现独立和 core 集成层级的 L1 cache regression，覆盖 hit、miss、refill、replacement、masked store、dirty writeback、backpressure 和 access error。
+仿真使用 Icarus Verilog。软件镜像需要 Python 3 与 RISC-V 裸机 GCC/binutils 工具链，独立 ISA 差分需要 Spike；benchmark 可选择 Verilator。核心综合与时序需要带 slang 前端的 Yosys、OpenROAD 和 Nangate45 平台文件。
 
-项目会先证明正确性，再评估 IPC、频率和面积优化。
+工具已在 PATH 时：
 
-### 研究方向
+```bash
+# 单元、集成及内部提交差分回归
+make BUILD_DIR=/tmp/rv32-test test
 
-计划研究小型乱序核中，保守 memory scheduling 和更激进 load scheduling 的差异：
+# 使用仓库自有的 C 测试程序进行 Spike 差分
+make BUILD_DIR=/tmp/rv32-spike test-spike PROGRAM=sw/tests/smoke.c SPIKE=/path/to/spike
 
-- load/store 都限制在 ROB head；
-- 确认与旧 memory operation 无冲突后允许 load 提前执行；
-- 使用 load/store queue 和 store-to-load forwarding。
+# 复现仅核心的时序目标
+make BUILD_DIR=/tmp/rv32-sta sta-ooo NANGATE45_DIR=/path/to/Nangate45 OOO_PERIOD=5
+```
 
-实验将比较退休指令数、周期数、IPC、memory stall cycles、cache miss rate、综合面积
-和关键路径时序。
+仿真／CAD 工具需要初始化时可传入 `CAD_ENV=/path/to/env.sh`。[功能清单](FEATURES.md#中文)包含分项测试和六程序批量测试命令。外部工作负载二进制作为本机输入，不随项目分发；测量条件保存在结果报告中。
 
-### 仓库结构
+### 范围与后续方向
+
+当前版本是小端、裸机 RV32IM 基线，不是特权级操作系统平台。同步异常精确提交后使核心停止运行，未实现特权级 trap handler、虚拟内存、Linux 或多核一致性；不支持 FENCE.I 和 A/F/D/C/V 扩展。
+
+Unified L2、支持提前 Load 与 Store-to-Load forwarding 的访存队列、复杂分支预测、超标量发射、完整 ISA 合规认证及物理签核均不属于当前版本。这些是后续扩展方向，不是现有实测基线已经具备的能力。
+
+### 仓库与文档
 
 ```text
-rtl/                 可综合处理器 RTL
-  pkg/               ISA 常量、公共类型和接口
-  frontend/          decode、immediate generation 和 fetch
-  core/              reference、pipeline、OoO 和 system top
-  pipeline/          流水线寄存器、forwarding 和 hazard control
-  backend/           regfile、ALU、mul/div、rename、ROB 和调度
-  cache/             已实现的 L1；未来的 L2 和 adapter
-  memory/            为共享外部 memory protocol RTL 预留
-
-tb/                  unit、core 和 model testbench
-sw/                  为 bare-metal 测试与 benchmark 预留
-docs/                带索引的设计、验证和实验结果文档
-scripts/             为 Makefile 之外的自动化脚本预留
-.github/workflows/    为持续集成任务预留
+rtl/         处理器 RTL、公共类型和 L1 cache
+tb/          单元／集成 testbench 与仿真存储器模型
+sw/          裸机启动代码、链接脚本和测试程序
+scripts/     ELF 转换、Spike 差分、综合与时序工具
+docs/        架构说明、验证资料和实测结果
+FEATURES.md  详细功能清单与测试命令
 ```
 
-### 当前状态
-
-RV32IM 多周期 reference core、五级顺序流水线以及 blocking direct-mapped L1 instruction/data cache 已经实现，并具有 self-checking regression。独立 wrapper 已将两个 L1 cache 分别接入 pipeline 和 OoO core。当前 `rv32_ooo_core` 已接通 frontend、decoder、重命名/调度后端、ALU/控制流、RV32M 与顺序数据访存执行、共享 CDB、顺序退休、错误预测恢复和精确同步异常。原始 memory port 和 split-L1 wrapper 两种配置的 reference/OoO Commit 差分验证已经实现，Unified L2 仍处于规划阶段。当前已实现内容包括：
-
-- 公共 RV32I 控制类型与指令 opcode；
-- 组合逻辑整数 ALU；
-- RV32I 组合逻辑 branch-condition 单元；
-- 具有两个读端口和一个写端口的 32 × 32-bit 架构寄存器堆；
-- I、S、B、U 和 J-type immediate 生成；
-- decoder 已支持全部 RV32I 寄存器和 immediate ALU 指令、conditional
-  branch、JAL、JALR、load 和 store，以及 LUI、AUIPC；同时能够识别 ECALL、
-  EBREAK、FENCE 和 FENCE.TSO 事件；暂不支持 FENCE.I；
-- 组合逻辑 LSU formatting 单元，支持地址对齐检查、store byte enable 和 signed/unsigned load extension；
-- 三级 RV32M 乘法器，使用 Radix-4 Booth 编码和 Wallace carry-save tree，吞吐率为每周期一条请求；
-- 单请求 RV32M 除法器，使用 32 周期 Radix-2 restoring division，支持 signed-magnitude 预处理和 RISC-V 规定的除零、溢出行为；
-- 多周期顺序 RV32IM reference core，具有 blocking instruction/data interface、architectural commit、system instruction、同步 trap 和 trap 后 HALT；
-- 五级 RV32IM 顺序流水线，具有 valid-bit stage control、可选 RAW stall、EX/MEM 与 MEM/WB forwarding、branch/JAL/JALR recovery、blocking load/store 和多周期 RV32M 集成；
-- 参数化的32 KiB direct-mapped blocking L1 instruction cache，使用32-byte line，支持逐 word refill、request backpressure、整 line 原子安装、reset invalidation 和 refill error 处理；
-- pipeline + separate L1 集成顶层及自检 regression，覆盖 instruction refill 与 redirect recovery、data load/store commit、masked store merge、dirty eviction、access fault 和 backing-memory request count；
-- 参数化的32 KiB direct-mapped blocking L1 data cache，支持 masked store hit、write-allocate、dirty victim writeback、逐 word transfer、request backpressure、整 line 原子安装和 access error 恢复；
-- OoO + separate L1 集成顶层及定向 regression，覆盖 instruction/data refill、同一 line 命中、Store hit 后可见性、同 Set 冲突替换、dirty writeback、Commit 结果和精确 ECALL halt；
-- 8-entry Fetch Queue，支持 ready/valid flow control、FIFO 顺序、满队列同周期替换、显式指针回绕、取指错误信息和 recovery Flush；
-- 单请求 OoO 取指前端，支持 I-cache backpressure、Fetch Queue flow control、顺序 PC 生成、redirect recovery、基于 epoch 的旧响应丢弃和 instruction access fault 信息传递；
-- 16-entry circular ROB，使用带 generation 的指针、显式 occupancy 和 PC/instruction/destination payload storage，支持 tagged out-of-order result completion、stale-tag rejection、带 backpressure 的顺序 retirement 以及同周期 allocation/retirement；
-- 64-entry 物理寄存器文件，具有两个组合数据读端口、两个独立 Rename ready 查询端口、allocation ready-state tracking、单 completion writeback 端口、固定 p0 行为以及同地址冲突时的 allocation 优先级；
-- 各 32 项的推测/已提交重命名映射表，支持双源查询、旧目标映射查询、初始一一映射、固定 x0 映射，以及包含同周期 retirement 的恢复；
-- 64-entry 物理寄存器 Free List，支持最低编号优先分配、推测/已提交空闲状态、retirement 释放旧映射、固定排除 p0、耗尽 backpressure，以及包含同周期 retirement 的恢复；
-- 8-entry 单 Dispatch、单 Issue 调度队列，支持物理 tag 唤醒、同周期 Dispatch/CDB 处理、功能单元 backpressure、确定性的最低槽位选择、同周期 Dispatch/Issue occupancy 更新和 recovery Flush；
-- 原子单指令 Rename/Dispatch 控制器，将 ROB 和 Issue Queue 分配与可选的 Free List、RAT 和 PRF 目标更新绑定为同一事务；
-- 组合逻辑整数/控制流 Issue Stage，支持物理寄存器寻址、操作数选择、branch compare、实际 next-PC 解析和 completion backpressure；
-- 单项寄存式 Completion Buffer，携带结果和 actual-next-PC metadata，支持稳定保持、recovery Flush 和无气泡 consume-and-replace；
-- 四输入 round-robin CDB arbiter，支持单 winner 下游 backpressure 和公平轮换；
-- 带缓冲的 OoO 乘法 producer，能够将 ROB/物理寄存器 metadata 与流水结果对齐，预留四个 outstanding credit，吸收 CDB backpressure，并在 recovery 时丢弃队列内和流水线内的旧工作；
-- 单请求 OoO 除法 producer，保存指令 metadata，在 CDB backpressure 下保持完成结果，并在 recovery 时清除在途计算或已保存结果；
-- 单请求顺序 OoO LSU，仅允许 ROB Head 访存，并在 CDB backpressure 下保持 Load/Store completion、access fault 和 memory Commit metadata；
-- 集成的单 Dispatch、单 Issue OoO backend，连接 Rename、Issue Queue、共享 PRF 读端口、ALU/MUL/DIV/LSU producer、CDB 写回、ROB 完成、RRAT/Free List 更新、顺序退休、分支恢复和异常恢复；
-- OoO core 自检 regression，覆盖整数/控制流与 RV32M 执行、顺序 Load/Store Commit、subword 格式、访存异常及 backpressure、错误路径 Store 取消、精确 ECALL 退休和 sticky halt；
-- 精确同步异常，覆盖非法指令、ECALL、EBREAK、指令/数据地址未对齐和 instruction/data access fault，异常提交后进入 sticky HALT；
-- Reference core 与 pipeline core 之间的 commit-level 差分验证，使用独立 memory image 并按退休顺序比较；
-- Reference core 与 OoO core 之间的 commit-level 差分验证，覆盖原始 memory port 与 split L1 两种配置，以及 RV32I/RV32M、控制流恢复、subword memory、地址未对齐、access fault 和最终 memory signature；
-- 覆盖已接通路径的 unit、reference-core、pipeline 和 OoO integration directed regression。
-
-Core-level RV32M 定向程序使用 MUL 和 DIV 检查集成行为；decoder 测试覆盖八条 RV32M 指令，Rename/Dispatch 路由测试直接检查 MUL、DIV 两个代表，独立算术测试覆盖有符号/无符号变体及边界情况。内部 reference 差分验证仍不能替代外部 ISA compliance 或 Spike/RVFI 验证。
-
-运行当前全部测试：
-
-```bash
-make test
-```
-
-如果仿真工具需要环境初始化脚本：
-
-```bash
-make CAD_ENV=/path/to/env.sh test
-```
-
-同时运行 decoder 仿真、lint 和综合完整性检查：
-
-```bash
-make CAD_ENV=/path/to/env.sh check-decoder
-```
-
-同时运行乘法器仿真、lint 和综合完整性检查：
-
-```bash
-make CAD_ENV=/path/to/env.sh check-multiplier
-```
-
-同时运行迭代除法器仿真、lint 和综合完整性检查：
-
-```bash
-make CAD_ENV=/path/to/env.sh check-divider
-```
-
-运行全部 reference-core 仿真、lint 和综合完整性检查：
-
-```bash
-make CAD_ENV=/path/to/env.sh check-reference-core
-```
-
-运行全部 pipeline unit 和 core-level regression：
-
-```bash
-make CAD_ENV=/path/to/env.sh check-pipeline
-```
-
-运行 reference core 与 pipeline core 的 commit 差分测试：
-
-```bash
-make CAD_ENV=/path/to/env.sh test-core-differential
-```
-
-分别通过原始 memory port 和 split L1 cache 运行 reference core 与 OoO core 的差分回归：
-
-```bash
-make CAD_ENV=/path/to/env.sh test-ooo-differential
-make CAD_ENV=/path/to/env.sh test-ooo-l1-differential
-```
-
-运行独立 I-cache 以及 pipeline/OoO L1 wrapper 集成测试：
-
-```bash
-make CAD_ENV=/path/to/env.sh test-icache
-make CAD_ENV=/path/to/env.sh test-pipeline-l1
-make CAD_ENV=/path/to/env.sh test-ooo-l1
-```
-
-运行独立 L1 D-cache regression：
-
-```bash
-make CAD_ENV=/path/to/env.sh test-dcache
-```
-
-运行 OoO 前端、后端数据结构和 core 集成 regression：
-
-```bash
-make CAD_ENV=/path/to/env.sh test-fetch-queue
-make CAD_ENV=/path/to/env.sh test-ooo-frontend
-make CAD_ENV=/path/to/env.sh test-rename-dispatch
-make CAD_ENV=/path/to/env.sh test-ooo-execute
-make CAD_ENV=/path/to/env.sh test-cdb-arbiter
-make CAD_ENV=/path/to/env.sh test-ooo-multiplier
-make CAD_ENV=/path/to/env.sh test-ooo-divider
-make CAD_ENV=/path/to/env.sh test-ooo-integer
-make CAD_ENV=/path/to/env.sh test-ooo-core
-make CAD_ENV=/path/to/env.sh test-ooo-rv32m
-make CAD_ENV=/path/to/env.sh test-ooo-memory
-make CAD_ENV=/path/to/env.sh test-phys-regfile
-make CAD_ENV=/path/to/env.sh test-rename-map
-make CAD_ENV=/path/to/env.sh test-free-list
-make CAD_ENV=/path/to/env.sh test-issue-queue
-make CAD_ENV=/path/to/env.sh test-rob test-rob-storage test-rob-completion test-rob-retirement
-```
-
-- [文档索引](docs/README.md)按照公开设计说明、验证资料和可复现实验结果组织项目文档。
+[文档索引](docs/README.md) · [流水线设计](docs/design/rv32-pipeline-core.md) · [OoO 设计](docs/design/rv32-ooo-core.md)
 
 ### 开源许可证
 
-本项目采用 [Apache License 2.0](LICENSE) 开源许可证。
+[Apache License 2.0](LICENSE)。外部测试输入不包含在项目分发内容中。

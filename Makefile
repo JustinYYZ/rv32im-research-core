@@ -3,16 +3,65 @@
 # Build and simulation entry points for RV32IM Research Core.
 # Run all simulation regressions with `make test`, or select a target below.
 
+.DEFAULT_GOAL := test
+
 CAD_ENV   ?=
 IVERILOG  ?= iverilog
 VVP       ?= vvp
 VERILATOR ?= verilator
 YOSYS     ?= yosys
 BUILD_DIR ?= build
+RISCV_PREFIX ?= riscv64-unknown-elf-
+RISCV_GCC     ?= $(RISCV_PREFIX)gcc
+RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump
+PYTHON        ?= python3
+SPIKE         ?= spike
+BENCHMARK_ROOT   ?=
+OPENROAD      ?= openroad
+NANGATE45_DIR ?=
+OOO_PERIOD    ?= 10.0
+BENCH_ENGINE  ?= icarus
+
+PROGRAM           ?= sw/tests/smoke.c
+PROGRAM_NAME      := $(basename $(notdir $(PROGRAM)))
+PROGRAM_BUILD_DIR := $(BUILD_DIR)/sw/$(PROGRAM_NAME)
+PROGRAM_ELF       := $(PROGRAM_BUILD_DIR)/program.elf
+PROGRAM_DIS       := $(PROGRAM_BUILD_DIR)/program.dis
+PROGRAM_MEMH      := $(PROGRAM_BUILD_DIR)/program.memh
+PROGRAM_MAP       := $(PROGRAM_BUILD_DIR)/program.map
+
+PROGRAM_CFLAGS := -march=rv32im -mabi=ilp32 -mcmodel=medany -O2 \
+	-ffreestanding -fno-builtin -fno-pic -fno-pie -msmall-data-limit=0 \
+	-ffunction-sections -fdata-sections
+PROGRAM_LDFLAGS := -nostdlib -nostartfiles -static -no-pie \
+	-Wl,--build-id=none,--gc-sections,--no-relax,-Map,$(PROGRAM_MAP) \
+	-T sw/link.ld
 
 # Leave CAD_ENV empty when the tools are already on PATH. A machine-specific
 # setup script can be supplied with: make CAD_ENV=/path/to/env.sh <target>
 ENV_SETUP = $(if $(strip $(CAD_ENV)),source "$(CAD_ENV)" >/dev/null &&,)
+
+.PHONY: build-program inspect-program
+
+build-program: $(PROGRAM_ELF) $(PROGRAM_DIS) $(PROGRAM_MEMH)
+
+inspect-program: build-program
+	$(RISCV_OBJDUMP) -h -t $(PROGRAM_ELF)
+
+$(PROGRAM_ELF): $(PROGRAM) sw/link.ld sw/common/start.S
+	mkdir -p $(PROGRAM_BUILD_DIR)
+	case "$(suffix $(PROGRAM))" in \
+		.elf) cp "$(PROGRAM)" "$@" ;; \
+		.c) $(RISCV_GCC) $(PROGRAM_CFLAGS) $(PROGRAM_LDFLAGS) sw/common/start.S "$(PROGRAM)" -lgcc -o "$@" ;; \
+		.s|.S) $(RISCV_GCC) $(PROGRAM_CFLAGS) $(PROGRAM_LDFLAGS) "$(PROGRAM)" -lgcc -o "$@" ;; \
+		*) echo "Unsupported PROGRAM type: $(PROGRAM)" >&2; exit 1 ;; \
+	esac
+
+$(PROGRAM_DIS): $(PROGRAM_ELF)
+	$(RISCV_OBJDUMP) -d -M no-aliases,numeric $< > $@
+
+$(PROGRAM_MEMH): $(PROGRAM_ELF) scripts/elf_to_memh.py
+	$(PYTHON) scripts/elf_to_memh.py $< $@
 
 ALU_TEST := $(BUILD_DIR)/rv32_alu_tb
 ALU_SRCS := \
@@ -203,6 +252,40 @@ OOO_L1_SRCS := $(filter-out tb/core/rv32_ooo_core_tb.sv,$(OOO_CORE_SRCS)) \
 	rtl/core/rv32_ooo_l1_top.sv \
 	tb/model/rv32_simple_memory.sv \
 	tb/cache/rv32_ooo_l1_tb.sv
+
+OOO_BENCHMARK_TEST := $(BUILD_DIR)/rv32_ooo_benchmark_tb
+OOO_BENCHMARK_SRCS := $(filter-out tb/model/rv32_simple_memory.sv tb/cache/rv32_ooo_l1_tb.sv,$(OOO_L1_SRCS)) \
+	tb/model/rv32_benchmark_memory.sv \
+	tb/core/rv32_ooo_benchmark_tb.sv
+OOO_SYNTH_SRCS := $(filter-out tb/core/rv32_ooo_core_tb.sv,$(OOO_CORE_SRCS))
+
+.PHONY: synth-ooo sta-ooo
+synth-ooo:
+	@test -n "$(strip $(NANGATE45_DIR))" || { echo "Set NANGATE45_DIR=/path/to/Nangate45 for this target." >&2; exit 1; }
+	bash -c '$(ENV_SETUP) $(PYTHON) scripts/synth_ooo.py --build-dir "$(abspath $(BUILD_DIR))" --platform "$(NANGATE45_DIR)" --yosys "$(YOSYS)" --period "$(OOO_PERIOD)" --sources $(OOO_SYNTH_SRCS)'
+
+sta-ooo:
+	@test -n "$(strip $(NANGATE45_DIR))" || { echo "Set NANGATE45_DIR=/path/to/Nangate45 for this target." >&2; exit 1; }
+	bash -c '$(ENV_SETUP) $(PYTHON) scripts/synth_ooo.py --build-dir "$(abspath $(BUILD_DIR))" --platform "$(NANGATE45_DIR)" --yosys "$(YOSYS)" --openroad "$(OPENROAD)" --period "$(OOO_PERIOD)" --sta --sources $(OOO_SYNTH_SRCS)'
+
+.PHONY: test-spike-tools test-spike test-benchmarks summarize-benchmarks
+summarize-benchmarks:
+	$(PYTHON) scripts/summarize_benchmarks.py "$(abspath $(BUILD_DIR))" --output "$(abspath $(BUILD_DIR))/benchmark-summary.md"
+
+test-spike-tools:
+	$(PYTHON) scripts/test_compare_commit_trace.py
+
+test-spike:
+	$(PYTHON) scripts/run_spike_diff.py "$(PROGRAM)" --build-dir "$(abspath $(BUILD_DIR))" --spike "$(SPIKE)" --iverilog "$(IVERILOG)" --vvp "$(VVP)" --engine "$(BENCH_ENGINE)" --verilator "$(VERILATOR)"
+
+test-benchmarks:
+	test -n "$(BENCHMARK_ROOT)"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/coremark_im.elf"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/aes_sha.elf"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/compression.elf"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/fft.elf"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/image.elf"
+	$(MAKE) test-spike PROGRAM="$(BENCHMARK_ROOT)/mergesort.elf"
 
 PHYS_REGFILE_TEST := $(BUILD_DIR)/rv32_phys_regfile_tb
 PHYS_REGFILE_SRCS := \
@@ -550,7 +633,7 @@ DCACHE_SRCS := \
 .PHONY: compile-core-differential test-core-differential compile-ooo-differential test-ooo-differential compile-ooo-l1-differential test-ooo-l1-differential
 .PHONY: compile-icache test-icache compile-pipeline-l1 test-pipeline-l1
 .PHONY: compile-dcache test-dcache
-.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core test-ooo-memory compile-ooo-l1 test-ooo-l1
+.PHONY: compile-ooo-integer test-ooo-integer compile-ooo-core test-ooo-core test-ooo-memory compile-ooo-l1 test-ooo-l1 compile-ooo-benchmark test-ooo-benchmark
 
 test: test-alu test-regfile test-fetch-queue test-ooo-frontend test-rename-dispatch test-ooo-execute test-cdb-arbiter test-ooo-multiplier test-ooo-divider test-ooo-lsu test-ooo-rv32m test-ooo-integer test-ooo-core test-ooo-memory test-ooo-l1 test-phys-regfile test-rename-map test-free-list test-issue-queue test-rob test-rob-storage test-rob-completion test-rob-retirement test-imm-gen test-decoder test-branch-unit test-lsu test-multiplier test-divider \
 	test-reference-core test-reference-core-trap test-reference-core-reset-pc check-pipeline test-core-differential test-ooo-differential test-ooo-l1-differential test-icache test-pipeline-l1 test-dcache
@@ -708,6 +791,24 @@ $(OOO_L1_TEST): $(OOO_L1_SRCS)
 	mkdir -p $(BUILD_DIR)
 	bash -c '$(ENV_SETUP) \
 		$(IVERILOG) -g2012 -Wall -s rv32_ooo_l1_tb -o $@ $(OOO_L1_SRCS)'
+
+compile-ooo-benchmark: $(OOO_BENCHMARK_TEST)
+
+test-ooo-benchmark: build-program $(OOO_BENCHMARK_TEST)
+	bash -c '$(ENV_SETUP) $(VVP) $(OOO_BENCHMARK_TEST) +MEMH="$(abspath $(PROGRAM_MEMH))" $(BENCHMARK_ARGS)'
+
+.PHONY: test-ooo-benchmark-verilator
+test-ooo-benchmark-verilator: build-program $(BUILD_DIR)/verilated-benchmark/Vrv32_ooo_benchmark_tb
+	$(BUILD_DIR)/verilated-benchmark/Vrv32_ooo_benchmark_tb +MEMH="$(abspath $(PROGRAM_MEMH))" $(BENCHMARK_ARGS)
+
+$(BUILD_DIR)/verilated-benchmark/Vrv32_ooo_benchmark_tb: $(OOO_BENCHMARK_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) $(VERILATOR) --binary --timing -Wno-fatal --top-module rv32_ooo_benchmark_tb --Mdir "$(abspath $(BUILD_DIR))/verilated-benchmark" -j 4 $(OOO_BENCHMARK_SRCS)'
+
+$(OOO_BENCHMARK_TEST): $(OOO_BENCHMARK_SRCS)
+	mkdir -p $(BUILD_DIR)
+	bash -c '$(ENV_SETUP) \
+		$(IVERILOG) -g2012 -Wall -s rv32_ooo_benchmark_tb -o $@ $(OOO_BENCHMARK_SRCS)'
 
 # Compile and run the physical-register data and readiness regression.
 test-phys-regfile: $(PHYS_REGFILE_TEST)
@@ -1083,6 +1184,6 @@ tools:
 		printf "yosys:     " && command -v $(YOSYS)'
 
 clean:
-	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_LSU_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(OOO_MEMORY_TEST) $(OOO_L1_TEST) $(ISSUE_QUEUE_TEST)
+	rm -f $(FETCH_QUEUE_TEST) $(OOO_FRONTEND_TEST) $(RENAME_DISPATCH_TEST) $(OOO_ISSUE_STAGE_TEST) $(OOO_COMPLETION_BUFFER_TEST) $(CDB_ARBITER_TEST) $(OOO_MULTIPLIER_TEST) $(OOO_DIVIDER_TEST) $(OOO_LSU_TEST) $(OOO_RV32M_TEST) $(OOO_INTEGER_TEST) $(OOO_CORE_TEST) $(OOO_MEMORY_TEST) $(OOO_L1_TEST) $(OOO_BENCHMARK_TEST) $(ISSUE_QUEUE_TEST)
 	rm -f $(ALU_TEST) $(REGFILE_TEST) $(PHYS_REGFILE_TEST) $(RENAME_MAP_TEST) $(FREE_LIST_TEST) $(ROB_TEST) $(ROB_STORAGE_TEST) $(ROB_COMPLETION_TEST) $(ROB_RETIREMENT_TEST) $(IMM_GEN_TEST) $(DECODER_TEST) \
 		$(BRANCH_UNIT_TEST) $(HAZARD_UNIT_TEST) $(FORWARDING_UNIT_TEST) $(LSU_TEST) $(MULTIPLIER_TEST) $(DIVIDER_TEST) $(REFERENCE_CORE_TEST) $(REFERENCE_CORE_TRAP_TEST) $(REFERENCE_CORE_RESET_PC_TEST) $(PIPELINE_CORE_COMPILE) $(PIPELINE_HAZARD_COMPILE) $(PIPELINE_FORWARDING_COMPILE) $(PIPELINE_CONTROL_FLOW_COMPILE) $(PIPELINE_MEMORY_COMPILE) $(PIPELINE_MULDIV_COMPILE) $(PIPELINE_TRAP_COMPILE) $(CORE_DIFFERENTIAL_COMPILE) $(OOO_DIFFERENTIAL_COMPILE) $(OOO_L1_DIFFERENTIAL_COMPILE) $(ICACHE_COMPILE) $(PIPELINE_L1_COMPILE) $(DCACHE_COMPILE)
